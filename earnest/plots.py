@@ -204,3 +204,22 @@ def gen_png(path, sigs, title):
     fig.tight_layout()
     fig.savefig(path)
     plt.close(fig)
+
+
+def suite_png(path, x, blocks, title, offset_s=0.0):
+    fig, ax = plt.subplots(2, 1, figsize=FIG, dpi=DPI)
+    tt = np.arange(len(x)) / FS
+    step = max(1, len(x) // 40000)
+    for c, a in enumerate(ax):
+        a.plot(tt[::step], x[::step, c], lw=0.4)
+        a.set_ylabel("left" if c == 0 else "right")
+        for b in blocks:
+            t0 = b["start_s"] + offset_s if "start_sample" in b else b["start_s"]
+            a.axvline(t0, color="r", alpha=0.4)
+            if c == 0:
+                a.text(t0, a.get_ylim()[1] * 0.9, b["name"], rotation=90, fontsize=7, va="top")
+    ax[1].set_xlabel("s")
+    fig.suptitle(title, fontsize=13)
+    fig.tight_layout()
+    fig.savefig(path)
+    plt.close(fig)

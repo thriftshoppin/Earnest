@@ -111,3 +111,31 @@ def resynth_report(s, path, title):
         L.append("| %d | %s | %s | %s | %s |" % (hz, ms("edc_err_db", i, 2), ms("rt60_err_pct", i, 1), ms("iacc_diff", i, 3), ms("spectral_err_db", i, 2)))
     L += ["", "Nothing here is called matched: judge the numbers above against your own limits."]
     return finish(L, path)
+
+
+def suite_report(m, path, outdir):
+    L = ["# earnest gen --suite %s" % m["mode"], "", "Written to `%s`" % outdir, "",
+         "One WAV, %d Hz, 32-bit float stereo, %.3f s long (%.0f s silence at the start, %.0f s at the end, %.0f s silent tail inside each block). Import it into the DAW, "
+         "export it through the effect (same sample rate if possible), then run `split`." % (m["fs"], m["length_s"], m["lead_s"], m["end_s"], m["block_tail_s"]), "",
+         "| block | start s | length s | peak dBFS |", "|---|---|---|---|"]
+    for b in m["blocks"]:
+        L.append("| %s | %.3f | %.3f | %.2f |" % (b["name"], b["start_s"], b["length_s"], b["peak_dbfs"]))
+    s = m["sweep"]
+    L += ["", "Sweep blocks: exponential %g-%g Hz, %g s, 0.5 s before the sweep. Click and noise-burst blocks: pans %s (constant power), first at 0.5 s, 2 s apart." % (s["f1"], s["f2"], s["seconds"], m["blocks"][-1].get("pans")),
+          m["note"] + ".", "Pan law: " + m["pan_law"] + "."]
+    return finish(L, path)
+
+
+def split_report(r, path, wet_path):
+    L = ["# earnest split: %s" % wet_path, "", "Suite mode %s. Wet file %.3f s long. Notes: %s" % (r["mode"], r["wet_seconds"], "; ".join(r["notes"]) or "none"), "",
+         "**Offset of the wet suite against the dry suite: %.3f ms (%d samples)** (found from the sweep_L block; limit 500 ms).%s" % (
+             r["offset_ms"], r["offset_samples"], " Blocks are cut at start + offset, so the effect's latency is removed." if r["offset_samples"] else ""), "",
+         "| block | cut from s | length s | expected s | peak dBFS | RMS dBFS | flags |", "|---|---|---|---|---|---|---|"]
+    for b in r["blocks"]:
+        fl = []
+        if b["empty"]:
+            fl.append("EMPTY (peak under -90 dBFS)")
+        if b["clipped_at_file_end"]:
+            fl.append("cut short by the end of the file")
+        L.append("| %s | %.3f | %.3f | %.3f | %.2f | %.2f | %s |" % (b["name"], b["start_s"], b["length_s"], b["expected_length_s"], b["peak_dbfs"], b["rms_dbfs"], "; ".join(fl) or "-"))
+    return finish(L, path)

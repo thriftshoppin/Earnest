@@ -18,20 +18,21 @@ def amp(db_peak: float) -> float:
     return 10.0 ** (db_peak / 20.0)
 
 
-def sweep_mono(fs=FS, db_peak=PEAK_DB):
+def sweep_mono(fs=FS, db_peak=PEAK_DB, tail_s=None):
     p = SWEEP
+    tail_s = p["tail_s"] if tail_s is None else tail_s
     s = dsp.sweep_signal(fs, p["f1"], p["f2"], p["seconds"])
     nf = int(p["fade_s"] * fs)
     s[:nf] *= np.linspace(0, 1, nf)
     s[-nf:] *= np.linspace(1, 0, nf)
-    out = np.zeros(int((p["lead_s"] + p["seconds"] + p["tail_s"]) * fs))
+    out = np.zeros(int(round((p["lead_s"] + p["seconds"] + tail_s) * fs)))
     k = int(p["lead_s"] * fs)
     out[k:k + len(s)] = s * amp(db_peak)
     return out
 
 
-def sweep_stereo(side: str, db_peak=PEAK_DB, fs=FS):
-    m = sweep_mono(fs, db_peak)
+def sweep_stereo(side: str, db_peak=PEAK_DB, fs=FS, tail_s=None):
+    m = sweep_mono(fs, db_peak, tail_s)
     x = np.zeros((len(m), 2))
     x[:, 0 if side == "L" else 1] = m
     return x
@@ -41,18 +42,22 @@ def click_times(n: int, fs=FS):
     return [int((CLICK_T0 + i * CLICK_GAP) * fs) for i in range(n)]
 
 
-def clicks_panned(fs=FS):
+def _click_len(fs, tail_s):
+    return int(round((CLICK_T0 + CLICK_GAP * len(PANS) + (CLICK_TAIL if tail_s is None else tail_s)) * fs))
+
+
+def clicks_panned(fs=FS, tail_s=None):
     a = amp(PEAK_DB)
-    x = np.zeros((int((CLICK_T0 + CLICK_GAP * len(PANS) + CLICK_TAIL) * fs), 2))
+    x = np.zeros((_click_len(fs, tail_s), 2))
     for p, k in zip(PANS, click_times(len(PANS), fs)):
         gl, gr = dsp.pan_gains(p)
         x[k, 0], x[k, 1] = a * gl, a * gr
     return x
 
 
-def clicks_mono(fs=FS):
+def clicks_mono(fs=FS, tail_s=None):
     a = amp(PEAK_DB)
-    x = np.zeros((int((CLICK_T0 + CLICK_GAP * len(PANS) + CLICK_TAIL) * fs), 2))
+    x = np.zeros((_click_len(fs, tail_s), 2))
     for k in click_times(len(PANS), fs):
         x[k, :] = a
     return x
@@ -67,10 +72,10 @@ def pink(n: int, rng) -> np.ndarray:
     return p / np.abs(p).max()
 
 
-def noise_bursts(fs=FS):
-    rng = np.random.default_rng(1234)
+def noise_bursts(fs=FS, tail_s=None):
+    rng = np.random.default_rng(1234)      # fixed seed: dry and wet runs use identical bursts
     a = amp(PEAK_DB)
-    x = np.zeros((int((CLICK_T0 + CLICK_GAP * len(PANS) + CLICK_TAIL) * fs), 2))
+    x = np.zeros((_click_len(fs, tail_s), 2))
     nb = int(BURST_S * fs)
     fade = int(0.005 * fs)
     for p, k in zip(PANS, click_times(len(PANS), fs)):

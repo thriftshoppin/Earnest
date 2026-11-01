@@ -8,13 +8,20 @@ from pathlib import Path
 
 import numpy as np
 
-from . import formula, gen, listen, plots, report, resynth, room
+from . import formula, gen, listen, plots, report, resynth, room, suite
 from .io import FS, new_run, read_wav, save_json
 
 
 def cmd_gen(a):
     out = Path(a.out) if a.out else new_run("gen")
     out.mkdir(parents=True, exist_ok=True)
+    if a.suite:
+        x, m = suite.write(a.suite, out)
+        save_json(out / ("probe_suite_%s.json" % a.suite), m)
+        plots.suite_png(out / ("probe_suite_%s.png" % a.suite), x, m["blocks"], "earnest gen --suite %s" % a.suite)
+        n = report.suite_report(m, out / "report.md", out)
+        print("gen --suite %s: %s (%.3f s; report %d lines)" % (a.suite, out / ("probe_suite_%s.wav" % a.suite), m["length_s"], n))
+        return 0
     sigs, manifest = gen.run(out)
     save_json(out / "gen.json", manifest)
     plots.gen_png(out / "gen.png", sigs, "earnest gen")
@@ -45,6 +52,22 @@ def _listen(path, t0=None, t1=None, hires=False, cmd="listen"):
 
 def cmd_listen(a):
     return _listen(a.file)
+
+
+def cmd_split(a):
+    man = json.loads(Path(a.manifest).read_text(encoding="utf-8"))
+    out = Path(a.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    dry_out = Path(a.dry_out) if a.dry_out else None
+    if dry_out:
+        dry_out.mkdir(parents=True, exist_ok=True)
+    r = suite.split(a.wet, man, out, dry_out)
+    save_json(out / "split.json", r)
+    wet, _ = read_wav(a.wet)
+    plots.suite_png(out / "split.png", wet, man["blocks"], "earnest split: %s (offset %.3f ms)" % (Path(a.wet).name, r["offset_ms"]), r["offset_samples"] / FS)
+    n = report.split_report(r, out / "report.md", a.wet)
+    print("split: %d blocks written to %s, offset %.3f ms (report %d lines)" % (len(r["blocks"]), out, r["offset_ms"], n))
+    return 0
 
 
 def cmd_zoom(a):
@@ -80,7 +103,14 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd", required=True)
     g = sub.add_parser("gen", help="write test-signal WAV files")
     g.add_argument("--out", help="output folder (default: a new run folder)")
+    g.add_argument("--suite", choices=["lite", "full"], help="write ONE probe-suite WAV with every stimulus joined (plus its manifest) instead of the separate files")
     g.set_defaults(fn=cmd_gen)
+    sp = sub.add_parser("split", help="cut a wet suite export back into the named block files")
+    sp.add_argument("wet")
+    sp.add_argument("manifest")
+    sp.add_argument("out_dir")
+    sp.add_argument("--dry-out", help="also write the matching dry blocks here")
+    sp.set_defaults(fn=cmd_split)
     l = sub.add_parser("listen", help="stereo scene sheet of a file")
     l.add_argument("file")
     l.set_defaults(fn=cmd_listen)
