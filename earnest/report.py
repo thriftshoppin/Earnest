@@ -116,12 +116,12 @@ def resynth_report(s, path, title):
 def suite_report(m, path, outdir):
     L = ["# earnest gen --suite %s" % m["mode"], "", "Written to `%s`" % outdir, "",
          "One WAV, %d Hz, 32-bit float stereo, %.3f s long (%.0f s silence at the start, %.0f s at the end, %.0f s silent tail inside each block). Import it into the DAW, "
-         "export it through the effect (same sample rate if possible), then run `split`." % (m["fs"], m["length_s"], m["lead_s"], m["end_s"], m["block_tail_s"]), "",
+         "export it through the effect (same sample rate if possible), then run `split`." % (m["fs"], m["total_s"], m["head_s"], m["end_s"], m["tail_s"]), "",
          "| block | start s | length s | peak dBFS |", "|---|---|---|---|"]
     for b in m["blocks"]:
         L.append("| %s | %.3f | %.3f | %.2f |" % (b["name"], b["start_s"], b["length_s"], b["peak_dbfs"]))
     s = m["sweep"]
-    L += ["", "Sweep blocks: exponential %g-%g Hz, %g s, 0.5 s before the sweep. Click and noise-burst blocks: pans %s (constant power), first at 0.5 s, 2 s apart." % (s["f1"], s["f2"], s["seconds"], m["blocks"][-1].get("pans")),
+    L += ["", "Sweep blocks: exponential %g-%g Hz, %g s, 0.5 s before the sweep. Click and noise-burst blocks: pans %s (constant power), first at 0.5 s, 2 s apart." % (s["f1"], s["f2"], s["seconds"], [-1, -0.5, 0, 0.5, 1]),
           m["note"] + ".", "Pan law: " + m["pan_law"] + "."]
     return finish(L, path)
 
