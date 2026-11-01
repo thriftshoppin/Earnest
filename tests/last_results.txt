@@ -1,0 +1,15 @@
+PASS  RT60 0.3 s within 5% in every band 125 Hz-8 kHz  errors % per band ['4.67', '2.33', '-3.33', '1.67', '-1.00', '-0.33', '0.33']; worst 4.67%
+PASS  IACC 0.3 s tail within +-0.05 of the true IACC in every band  measured [0.45, 0.233, 0.329, 0.298, 0.342, 0.273, 0.338]; true ['0.451', '0.229', '0.343', '0.301', '0.343', '0.274', '0.339']; worst |diff| 0.014
+PASS  RT60 1.2 s within 5% in every band 125 Hz-8 kHz  errors % per band ['-1.75', '-1.25', '-1.00', '0.58', '0.08', '-0.08', '-0.50']; worst 1.75%
+PASS  IACC 1.2 s tail within +-0.05 of the true IACC in every band  measured [0.353, 0.357, 0.299, 0.279, 0.326, 0.32, 0.307]; true ['0.353', '0.360', '0.299', '0.279', '0.327', '0.320', '0.307']; worst |diff| 0.003
+PASS  RT60 2.5 s within 5% in every band 125 Hz-8 kHz  errors % per band ['1.44', '-0.08', '-0.44', '0.00', '0.60', '0.16', '-0.32']; worst 1.44%
+PASS  IACC 2.5 s tail within +-0.05 of the true IACC in every band  measured [0.375, 0.376, 0.317, 0.31, 0.309, 0.306, 0.299]; true ['0.371', '0.377', '0.318', '0.311', '0.309', '0.306', '0.299']; worst |diff| 0.004
+PASS  tap delays within +-0.2 ms  taps found 5 (status resolved), missed 0, delay errors ms ['-0.008', '0.004', '0.008', '-0.004', '-0.008']
+PASS  tap pans within +-0.05  pan errors ['0.000', '0.000', '0.000', '0.000', '0.000']
+PASS  no spurious taps (found == true count)  found 5, true 5
+PASS  dense tail with no taps reports 'unresolved' (never padded to 24)  status unresolved, count_found 0
+PASS  direct matrix recovered (1.0 / 0.1)  M = {'L': [0.977, 0.098], 'R': [0.098, 0.977]}
+PASS  linearity: linear system passes (flag false)  -30 dBFS vs -18 dBFS worst 0.000 dB; repeat vs first -18 dBFS worst 0.000 dB
+PASS  linearity: soft-clipped system is flagged  -30 dBFS vs -18 dBFS worst 3.770 dB
+PASS  pan transfer map: identity system returns the input pan (+-0.05)  in [-1.0, -0.5, 0.0, 0.5, 1.0] -> out [-1.0, -0.5, 0.0, 0.5, 1.0]
+PASS  resynth smoke: RT60 error mean within 15% per band (info limit)  means [-1.897, -0.974, 1.625, 0.87, 0.367, 0.93, 0.899]
