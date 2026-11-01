@@ -1,0 +1,95 @@
+{
+ "name": "earnest_probe_v1",
+ "fs": 48000,
+ "channels": 2,
+ "head_s": 2.0,
+ "end_s": 1.0,
+ "tail_s": 6.0,
+ "blocks": [
+  {
+   "name": "sweep_L",
+   "start_s": 2.0,
+   "length_s": 14.5,
+   "peak_dbfs": -18.0,
+   "description": "exp sweep 20 Hz-16 kHz, 8 s, left only"
+  },
+  {
+   "name": "sweep_R",
+   "start_s": 16.5,
+   "length_s": 14.5,
+   "peak_dbfs": -18.0,
+   "description": "exp sweep 20 Hz-16 kHz, 8 s, right only"
+  },
+  {
+   "name": "sweep_L_m30",
+   "start_s": 31.0,
+   "length_s": 14.5,
+   "peak_dbfs": -30.0,
+   "description": "same sweep, 12 dB lower, left only (linearity)"
+  },
+  {
+   "name": "sweep_R_m30",
+   "start_s": 45.5,
+   "length_s": 14.5,
+   "peak_dbfs": -30.0,
+   "description": "same sweep, 12 dB lower, right only (linearity)"
+  },
+  {
+   "name": "sweep_L_rep",
+   "start_s": 60.0,
+   "length_s": 14.5,
+   "peak_dbfs": -18.0,
+   "description": "repeat of sweep_L (time-variance check)"
+  },
+  {
+   "name": "sweep_R_rep",
+   "start_s": 74.5,
+   "length_s": 14.5,
+   "peak_dbfs": -18.0,
+   "description": "repeat of sweep_R (time-variance check)"
+  },
+  {
+   "name": "clicks_panned",
+   "start_s": 89.0,
+   "length_s": 16.5,
+   "peak_dbfs": -18.0,
+   "description": "one-sample clicks, constant-power pans -1,-0.5,0,0.5,1, 2 s apart"
+  },
+  {
+   "name": "clicks_mono",
+   "start_s": 105.5,
+   "length_s": 16.5,
+   "peak_dbfs": -18.0,
+   "description": "same one-sample click in both channels, 5 times, 2 s apart"
+  },
+  {
+   "name": "noise_bursts_panned",
+   "start_s": 122.0,
+   "length_s": 16.5,
+   "peak_dbfs": -18.0,
+   "description": "0.5 s pink-noise bursts at pans -1,-0.5,0,0.5,1, 2 s apart"
+  },
+  {
+   "name": "noise_mid",
+   "start_s": 138.5,
+   "length_s": 17.0,
+   "peak_dbfs": -18.0,
+   "description": "3 pink bursts, left = right (input correlation +1), 5 s apart"
+  },
+  {
+   "name": "noise_side",
+   "start_s": 155.5,
+   "length_s": 17.0,
+   "peak_dbfs": -18.0,
+   "description": "3 pink bursts, left = -right (input correlation -1), 5 s apart"
+  },
+  {
+   "name": "noise_wide",
+   "start_s": 172.5,
+   "length_s": 17.0,
+   "peak_dbfs": -18.0,
+   "description": "3 pink bursts, left and right independent (input correlation 0), 5 s apart"
+  }
+ ],
+ "total_s": 190.5
+}

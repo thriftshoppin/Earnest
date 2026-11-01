@@ -63,7 +63,7 @@ def room_report(r, path, title):
     lin = r["linearity"]
     L.append("## Linearity (limit %.1f dB in any band 125 Hz-8 kHz)" % lin.get("limit_db", 1.0))
     if not lin.get("run"):
-        L.append("- not run: %s" % lin.get("reason"))
+        L.append("- linearity: %s" % lin.get("reason"))
     else:
         for k, c in lin["comparisons"].items():
             if not c.get("run"):
@@ -127,15 +127,22 @@ def suite_report(m, path, outdir):
 
 
 def split_report(r, path, wet_path):
-    L = ["# earnest split: %s" % wet_path, "", "Suite mode %s. Wet file %.3f s long. Notes: %s" % (r["mode"], r["wet_seconds"], "; ".join(r["notes"]) or "none"), "",
-         "**Offset of the wet suite against the dry suite: %.3f ms (%d samples)** (found from the sweep_L block; limit 500 ms).%s" % (
-             r["offset_ms"], r["offset_samples"], " Blocks are cut at start + offset, so the effect's latency is removed." if r["offset_samples"] else ""), "",
-         "| block | cut from s | length s | expected s | peak dBFS | RMS dBFS | flags |", "|---|---|---|---|---|---|---|"]
-    for b in r["blocks"]:
-        fl = []
-        if b["empty"]:
-            fl.append("EMPTY (peak under -90 dBFS)")
-        if b["clipped_at_file_end"]:
-            fl.append("cut short by the end of the file")
-        L.append("| %s | %.3f | %.3f | %.3f | %.2f | %.2f | %s |" % (b["name"], b["start_s"], b["length_s"], b["expected_length_s"], b["peak_dbfs"], b["rms_dbfs"], "; ".join(fl) or "-"))
+    cal = r["calibration"]
+    L = ["# earnest split: %s" % wet_path, "", "Manifest %s (%s). Wet file %.3f s long. Notes: %s" % (r["manifest"], r["mode"], r["wet_seconds"], "; ".join(r["notes"]) or "none"), ""]
+    if cal.get("applied"):
+        L.append("**Level calibration from the Mix 0 pass: G = %.3f dB, divided out of every cut file.** Checks: %s." % (cal["G_db"], cal["checks"]))
+    elif cal.get("warnings"):
+        L.append("**Level calibration NOT applied:** " + "; ".join(cal["warnings"]))
+    else:
+        L.append("No calibration requested (needs --labels ending in 0).")
+    L += ["", "Position of the dry suite's time zero in the wet file (offset) for each copy. It includes where the clip was placed and the effect's own latency.", ""]
+    for st in r["steps"]:
+        L += ["## step %d%s: offset %.3f ms, start %.3f s%s" % (st["index"], (" (Mix %s)" % st["label"]) if st["label"] is not None else "", st["offset_ms"], st["start_s"],
+                                                           "  **EMPTY: no trace of the suite found, position inferred from the gaps**" if st["inferred"] else ""),
+              "| block | peak dBFS | RMS dBFS | length s | flags |", "|---|---|---|---|---|"]
+        for b in st["blocks"]:
+            L.append("| %s | %.2f | %.2f | %.3f | %s |" % (b["name"], b["peak_dbfs"], b["rms_dbfs"], b["length_s"], "EMPTY (peak under -90 dBFS)" if b["empty"] else "-"))
+        if st["cut_short"]:
+            L.append("- this copy is cut short by the end of the file")
+        L.append("")
     return finish(L, path)

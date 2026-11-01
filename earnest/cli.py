@@ -54,19 +54,45 @@ def cmd_listen(a):
     return _listen(a.file)
 
 
+def _labels(a):
+    return [int(x) if x.strip().lstrip("-").isdigit() else x.strip() for x in a.labels.split(",")] if a.labels else None
+
+
 def cmd_split(a):
-    man = json.loads(Path(a.manifest).read_text(encoding="utf-8"))
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    dry_out = Path(a.dry_out) if a.dry_out else None
-    if dry_out:
-        dry_out.mkdir(parents=True, exist_ok=True)
-    r = suite.split(a.wet, man, out, dry_out)
+    labels = _labels(a)
+    reps = a.repeats if a.repeats else (len(labels) if labels else 1)
+    r = suite.run_split(a.wet, a.manifest, out, Path(a.dry_out) if a.dry_out else None, reps, labels, a.dry)
     save_json(out / "split.json", r)
-    wet, _ = read_wav(a.wet)
-    plots.suite_png(out / "split.png", wet, man["blocks"], "earnest split: %s (offset %.3f ms)" % (Path(a.wet).name, r["offset_ms"]), r["offset_samples"] / FS)
     n = report.split_report(r, out / "report.md", a.wet)
-    print("split: %d blocks written to %s, offset %.3f ms (report %d lines)" % (len(r["blocks"]), out, r["offset_ms"], n))
+    empties = [(s["index"], s["empty_blocks"]) for s in r["steps"] if s["empty_blocks"]]
+    print("split: %d copy(ies) cut into %s (report %d lines)%s" % (len(r["steps"]), out, n, ("; EMPTY blocks in steps %s" % [e[0] for e in empties]) if empties else ""))
+    return 2 if any(s["inferred"] or s["all_empty"] for s in r["steps"]) else 0
+
+
+def cmd_analyze(a):
+    from . import analyze
+    code, p, s = analyze.analyze(a.export, a.room, a.manifest, _labels(a), a.out, a.dry)
+    print("run time %.0f s, peak memory %.0f MB" % (s["seconds"], s["peak_memory_mb"]))
+    return code
+
+
+def cmd_analyze_all(a):
+    from . import analyze
+    code, p = analyze.analyze_all(a.folder, _labels(a), a.manifest)
+    return code
+
+
+def cmd_mixcurve(a):
+    from . import mixcurve
+    labels = _labels(a) or [Path(f).name for f in a.runs]
+    if len(labels) != len(a.runs):
+        raise SystemExit("mixcurve: %d labels for %d run folders" % (len(labels), len(a.runs)))
+    out = new_run("mixcurve")
+    c, n = mixcurve.write([(lb, mixcurve.load_run(f)) for lb, f in zip(labels, a.runs)], out, a.title or "mixcurve")
+    save_json(out / "mixcurve.json", c)
+    print("mixcurve: %s (report %d lines)" % (out, n))
     return 0
 
 
@@ -110,7 +136,28 @@ def main(argv=None):
     sp.add_argument("manifest")
     sp.add_argument("out_dir")
     sp.add_argument("--dry-out", help="also write the matching dry blocks here")
+    sp.add_argument("--repeats", type=int, help="number of copies of the suite in the wet file (default: number of labels, else 1)")
+    sp.add_argument("--labels", help="Mix labels per copy, e.g. 100,80,60,30,0; a last label of 0 fixes the level calibration")
+    sp.add_argument("--dry", help="dry suite file (default: the file next to the manifest, else regenerated)")
     sp.set_defaults(fn=cmd_split)
+    an = sub.add_parser("analyze", help="one export -> split, calibrate, room, mixcurve, stage -> summary.md")
+    an.add_argument("export")
+    an.add_argument("--room", required=True)
+    an.add_argument("--manifest")
+    an.add_argument("--labels", help="default 100,80,60,30,0")
+    an.add_argument("--out")
+    an.add_argument("--dry")
+    an.set_defaults(fn=cmd_analyze)
+    aa = sub.add_parser("analyze-all", help="analyze every .wav/.flac in a folder (room name = text before the first _ or -)")
+    aa.add_argument("folder")
+    aa.add_argument("--manifest")
+    aa.add_argument("--labels")
+    aa.set_defaults(fn=cmd_analyze_all)
+    mc = sub.add_parser("mixcurve", help="metrics against Mix for several room run folders (each with room.json)")
+    mc.add_argument("runs", nargs="+")
+    mc.add_argument("--labels")
+    mc.add_argument("--title")
+    mc.set_defaults(fn=cmd_mixcurve)
     l = sub.add_parser("listen", help="stereo scene sheet of a file")
     l.add_argument("file")
     l.set_defaults(fn=cmd_listen)

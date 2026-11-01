@@ -277,6 +277,8 @@ def linearity(sets: dict, fs: int = FS):
         return {"run": False, "reason": "no -18 dBFS sweeps"}
     irs_a, _ = estimate_irs(ref, fs)
     ea, ca = _band_energy_db(irs_a, fs), _edc_curves(irs_a, fs)
+    if not sets["b"] and not sets["rep"]:
+        return {"run": False, "reason": "not run (lite set)", "limit_db": LIN_LIMIT_DB}
     out = {"run": True, "limit_db": LIN_LIMIT_DB, "comparisons": {}}
     flag = False
     for key, label in (("b", "-30 dBFS vs -18 dBFS"), ("rep", "repeat vs first -18 dBFS")):
@@ -359,13 +361,22 @@ def analyze_sweeps(sweeps: dict, fs: int = FS):
 
 def run_room(dry, wet, fs: int = FS):
     sets, clicks, notes = load_sets(dry, wet)
+    return run_room_sets(sets, clicks, notes, fs)
+
+
+def run_room_sets(sets: dict, clicks: dict, notes=(), fs: int = FS):
+    """Same as run_room on in-memory data: sets = {'a': {side: (dry, wet)}, 'b': ..., 'rep': ...}, clicks = {name: (dry, wet)}."""
     if not sets["a"]:
         raise SystemExit("room: no sweep pairs found (need sweep_L.wav / sweep_R.wav in both folders, or two WAV files)")
     res, plot = analyze_sweeps(sets["a"], fs)
-    res["notes"] = notes
+    res["notes"] = list(notes)
     res["input_mode"] = "mono_sum" if "M" in res["inputs"] else ("stereo" if len(res["inputs"]) == 2 else "one_channel_only:" + res["inputs"][0])
     res["linearity"] = linearity(sets, fs)
-    res["nonlinear_or_time_variant"] = res["linearity"].get("nonlinear_or_time_variant") if res["linearity"].get("run") else None
+    if not res["linearity"].get("run"):
+        pass
+    elif not (sets["b"] or sets["rep"]):
+        res["linearity"]["note"] = "not run (lite set)"
+    res["nonlinear_or_time_variant"] = res["linearity"].get("nonlinear_or_time_variant") if res["linearity"].get("run") and (sets["b"] or sets["rep"]) else None
     res["pan_map"] = {}
     for name, (d, w) in clicks.items():
         res["pan_map"][name] = pan_map(d, w, plot["latency"], fs)

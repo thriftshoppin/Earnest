@@ -13,9 +13,10 @@ PASS  linearity: linear system passes (flag false)  -30 dBFS vs -18 dBFS worst 0
 PASS  linearity: soft-clipped system is flagged  -30 dBFS vs -18 dBFS worst 3.770 dB
 PASS  pan transfer map: identity system returns the input pan (+-0.05)  in [-1.0, -0.5, 0.0, 0.5, 1.0] -> out [-1.0, -0.5, 0.0, 0.5, 1.0]
 PASS  resynth smoke: RT60 error mean within 15% per band (info limit)  means [-1.897, -0.974, 1.625, 0.87, 0.367, 0.93, 0.899]
-PASS  suite identity (full): every block equals its gen signal within 1e-6  9 blocks, worst |diff| 7.45e-09, offset 0 samples
+PASS  suite identity (full, 12 blocks): every block equals its gen signal within 1e-6  12 blocks, worst |diff| 7.45e-09, offset 0 samples
 PASS  suite effect (7 ms delay, gain 0.5): offset found within +-1 sample  true 336 samples (7.000 ms), found 336 samples (7.000 ms)
 PASS  suite effect: blocks equal 0.5 x dry within 1e-6  worst |diff| 3.73e-09
-PASS  suite lite -> split -> room: RT60 0.3 s within 5% in every band  offset 144 samples (true 144); errors % ['-4.00', '1.33', '3.00', '0.00', '3.67', '1.00', '0.33']; worst 4.00%; taps resolved (5); pan map blocks {'clicks_panned': 5, 'clicks_mono': 5}
-PASS  suite lite -> split -> room: RT60 1.2 s within 5% in every band  offset 144 samples (true 144); errors % ['2.92', '-0.33', '0.83', '0.92', '0.08', '0.92', '0.08']; worst 2.92%; taps resolved (5); pan map blocks {'clicks_panned': 5, 'clicks_mono': 5}
-PASS  suite lite -> split -> room: RT60 2.5 s within 5% in every band  offset 144 samples (true 144); errors % ['1.92', '-1.56', '0.16', '-0.40', '-0.16', '0.16', '0.04']; worst 1.92%; taps resolved (5); pan map blocks {'clicks_panned': 5, 'clicks_mono': 5}
+PASS  suite lite -> split -> room: RT60 0.3 s within 5% in every band  offset 144 samples (true 144); errors % ['-4.00', '1.33', '3.00', '0.00', '3.67', '1.00', '0.33']; worst 4.00%; taps resolved (5); pan map blocks {'clicks_panned': 5, 'clicks_mono': 5}; linearity: not run (lite set)
+PASS  suite lite -> split -> room: RT60 1.2 s within 5% in every band  offset 144 samples (true 144); errors % ['2.92', '-0.33', '0.83', '0.92', '0.08', '0.92', '0.08']; worst 2.92%; taps resolved (5); pan map blocks {'clicks_panned': 5, 'clicks_mono': 5}; linearity: not run (lite set)
+PASS  room on a lite set prints 'linearity: not run (lite set)' and still fits everything  report contains the line: True; nonlinear flag None; taps 5
+PASS  suite lite -> split -> room: RT60 2.5 s within 5% in every band  offset 144 samples (true 144); errors % ['1.92', '-1.56', '0.16', '-0.40', '-0.16', '0.16', '0.04']; worst 1.92%; taps resolved (5); pan map blocks {'clicks_panned': 5, 'clicks_mono': 5}; linearity: not run (lite set)

@@ -3,6 +3,18 @@
 Turns stereo audio into things Claude can read: a **scene sheet** (`listen`), a **room card** with a fitted **reverb formula** (`room`), and a statistical
 re-render check (`resynth`). It never plays audio and contains no output-device code. Signals are written as WAV files and bounced offline in a DAW.
 
+## How to run (three lines)
+1. Put the Cakewalk export (one file per room) in a folder.
+2. `py -3.14 -m earnest analyze-all <folder>` (one room: `py -3.14 -m earnest analyze <file> --room "Atrium"`).
+3. Read `all_rooms_summary.md` (and each room's `summary.md`) in the `runs\...-analyze-...` folder it prints. Nothing plays audio.
+
+## Exporting a room (what to do in Cakewalk)
+- Import the probe once (`gen --suite full` writes it; the user's version is `probe\earnest_probe_v1.flac`, 190.5 s, with its `.json`). Put one Univerb track per Mix level, with the Mix knob **fixed** (no automation) at 100, 80, 60, 30 and 0 **in that order**, the room set to the one you are measuring.
+- Put the same probe clip on each track at a different time, one after another, with **at least 4 s of silence** between the clips. No solo or mute changes between them; only that track's effect may be in the path.
+- The **last clip must be Mix 0**: it is the dry reference. Earnest measures its level against the generated probe and removes any global gain (normalize, master fader).
+- Export one file per room. Normalize may stay on. 24-bit / 48 kHz is preferred; 16-bit / 44.1 kHz works (it is resampled to 48 kHz, and a 16-bit floor near -90 dBFS limits how far long tails can be fitted; bands with under 45 dB of decay range are flagged).
+- `analyze` finds the five clips itself (by their sweep), so exact placement does not matter. It stops with a non-zero exit code if a clip is silent or the Mix 0 clip is not clean dry, and says which.
+
 ## Install
 Python 3.14 with `numpy scipy soundfile matplotlib pyloudnorm` installed globally (versions in `requirements-lock.txt`, a plain `pip freeze` of that Python).
 No venv. Run from this folder: `py -3.14 -m earnest <command>`.
@@ -11,6 +23,7 @@ No venv. Run from this folder: `py -3.14 -m earnest <command>`.
 - `gen` -> test signals, 48 kHz 32-bit float, peak -18 dBFS: `sweep_L/R.wav` (exp sweep 20 Hz-16 kHz, 8 s, 0.5 s before, 4 s silence after), `sweep_L/R_m30.wav` (same at -30 dBFS),
   `clicks_panned.wav` (pans -1, -0.5, 0, 0.5, 1, constant power, 2 s apart), `clicks_mono.wav` (same click in both channels), `noise_bursts_panned.wav`.
   Bounce each through the effect with the same names into a wet folder. For the linearity repeat, bounce `sweep_L/R.wav` twice and save the second as `sweep_L_rep.wav` / `sweep_R_rep.wav`.
+- `analyze`, `analyze-all`, `split --repeats/--labels`, `mixcurve` and `stage` are described under "Multi-pass workflow" below.
 - `gen --suite lite|full` -> ONE WAV `probe_suite_<mode>.wav` (+ `.json` manifest, report, PNG) with every stimulus joined, so one DAW export per effect setting gives everything `room` needs.
   Same signals and names as above; each block has a 6 s silent tail; 2 s silence at the start, 1 s at the end. **lite** (81.5 s): sweep_L, sweep_R, clicks_panned, clicks_mono, noise_bursts_panned.
   **full** (139.5 s): sweep_L, sweep_R, sweep_L_m30, sweep_R_m30, sweep_L_rep, sweep_R_rep (identical copy of the -18 dBFS sweep), clicks_panned, clicks_mono, noise_bursts_panned.
@@ -47,3 +60,11 @@ Use `full` when you want the linearity check (needs the -30 dBFS and repeat swee
 
 ## Tests
 `py -3.14 tests\run_tests.py` (synthetic IRs with known answers, PASS/FAIL with numbers; about 2 minutes). `tests\make_demo.py <dir>` builds a demo dry/wet folder pair from a known synthetic reverb.
+
+## Multi-pass workflow (commands)
+- `gen --suite full` reproduces `earnest_probe_v1` (12 blocks, 190.5 s; the three noise-width blocks are copied from the bundled `probe\` reference). `lite` has the first 5 blocks needed by `room` (81.5 s).
+- `split <wet> <manifest.json> <out_dir> --repeats 5 --labels 100,80,60,30,0 [--dry-out <dir>]`: finds each copy of the suite independently (cross-correlating the dry sweep_L block with the wet file in chunks, never loading a big file whole), writes `step1_mix100\ ... step5_mix0\`, divides the Mix 0 level gain out of every file, reports each offset, peak/RMS per block, and names any silent pass EMPTY. Everything is read from the manifest (names, times); the dry signal comes from the file next to the manifest if there is one.
+- `analyze <export> --room "<name>" [--manifest ...] [--labels ...] [--out ...]`: split + calibration + `room` on every pass (against the generated dry blocks) + `mixcurve` + `stage`; writes `summary.md` (<= 120 lines), `summary.json`, `mixcurve.png` and one folder per pass with the usual room report, formula.json and room.png. Exit code 2 if a pass is empty or the Mix 0 pass is not clean dry.
+- `analyze-all <folder>`: `analyze` on every .wav/.flac there (room = text before the first `_` or `-` in the file name); writes `all_rooms_summary.md` (<= 100 lines) with one row per room and Mix level.
+- `mixcurve <room run folder> ... [--labels 100,80,...]`: the room metrics against Mix, one curve, flags for metrics that move more than 10% (dB values: 1 dB). A pass with no tail (Mix 0) gets no RT60/EDT/IACC.
+- `stage` (inside `analyze`): from noise_mid (input correlation +1), noise_wide (0), noise_side (-1): L/R correlation and side/mid dB of the direct part and of the tail (0.5 s after each burst ends, up to 5 s or the next burst; per octave 125 Hz-8 kHz), and the width gain (output minus input side/mid dB, defined for noise_wide only).

@@ -164,15 +164,14 @@ def main():
 def suite_tests():
     import json
     import tempfile
-    from earnest.cli import main as cli_main
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         # 1. identity: suite -> split (offset 0) equals the gen signals
         dry, man = suite.build("full")
         write_wav(td / "dry_full.wav", dry)
-        (td / "man.json").write_text(json.dumps(man), encoding="utf-8")
-        (td / "id").mkdir()
-        res = suite.split(td / "dry_full.wav", man, td / "id", None)
+        mp = td / "man.json"
+        mp.write_text(json.dumps(man), encoding="utf-8")
+        res = suite.run_split(td / "dry_full.wav", mp, td / "id", None, 1, None)
         worst, names = 0.0, []
         gen_files = gen.make_all()
         for b in man["blocks"]:
@@ -184,28 +183,29 @@ def suite_tests():
                 d = max(d, float(np.abs(seg[: len(g)] - g).max()), float(np.abs(seg[len(g):]).max()))
             worst = max(worst, d)
             names.append(b["name"])
-        check("suite identity (full): every block equals its gen signal within 1e-6", worst <= 1e-6 and res["offset_samples"] == 0,
-              "%d blocks, worst |diff| %.2e, offset %d samples" % (len(names), worst, res["offset_samples"]))
+        off = res["steps"][0]["start_sample"]
+        check("suite identity (full, 12 blocks): every block equals its gen signal within 1e-6", worst <= 1e-6 and off == 0,
+              "%d blocks, worst |diff| %.2e, offset %d samples" % (len(names), worst, off))
         # 2. synthetic effect: 7 ms delay and a gain change
         d7 = int(round(0.007 * FS))
         wet = np.zeros((len(dry) + d7, 2))
         wet[d7:] = 0.5 * dry
         write_wav(td / "wet7.wav", wet)
-        (td / "w7").mkdir()
-        r7 = suite.split(td / "wet7.wav", man, td / "w7", None)
+        r7 = suite.run_split(td / "wet7.wav", mp, td / "w7", None, 1, None)
         worst = 0.0
         for b in man["blocks"]:
             seg, _ = read_wav(td / "w7" / (b["name"] + ".wav"))
             worst = max(worst, float(np.abs(seg - 0.5 * suite.block_signal(b["name"])).max()))
-        check("suite effect (7 ms delay, gain 0.5): offset found within +-1 sample", abs(r7["offset_samples"] - d7) <= 1,
-              "true %d samples (7.000 ms), found %d samples (%.3f ms)" % (d7, r7["offset_samples"], r7["offset_ms"]))
+        o7 = r7["steps"][0]["start_sample"]
+        check("suite effect (7 ms delay, gain 0.5): offset found within +-1 sample", abs(o7 - d7) <= 1, "true %d samples (7.000 ms), found %d samples (%.3f ms)" % (d7, o7, o7 / FS * 1000))
         check("suite effect: blocks equal 0.5 x dry within 1e-6", worst <= 1e-6, "worst |diff| %.2e" % worst)
         # 3. known reverb through the lite suite -> split -> room; RT60 within 5 %
         taps = [{"delay_ms": 7.3, "gain_db": -6.0, "pan": -0.6, "source": "L"}, {"delay_ms": 13.1, "gain_db": -9.0, "pan": 0.4, "source": "R"},
                 {"delay_ms": 21.7, "gain_db": -12.0, "pan": -0.2, "source": "L"}, {"delay_ms": 34.9, "gain_db": -14.0, "pan": 0.8, "source": "R"},
                 {"delay_ms": 52.3, "gain_db": -17.0, "pan": 0.0, "source": "L"}]
         dl, ml = suite.build("lite")
-        (td / "manl.json").write_text(json.dumps(ml), encoding="utf-8")
+        mlp = td / "manl.json"
+        mlp.write_text(json.dumps(ml), encoding="utf-8")
         for rt in (0.3, 1.2, 2.5):
             irs = synth_system(rt, rho=0.3, seed=int(rt * 10) + 100, taps=taps)
             wl = np.zeros((len(dl), 2))
@@ -215,17 +215,20 @@ def suite_tests():
             tag = "rt%d" % int(rt * 10)
             write_wav(td / (tag + ".wav"), wl)
             wd, dd = td / (tag + "_wet"), td / (tag + "_dry")
-            wd.mkdir()
-            dd.mkdir()
-            rs = suite.split(td / (tag + ".wav"), ml, wd, dd)
+            rs = suite.run_split(td / (tag + ".wav"), mlp, wd, dd, 1, None)
             out, _ = room.run_room(dd, wd)
             errs = [(b["rt60_s"] - rt) / rt * 100.0 for b in out["tail_bands"]]
-            ia_ok = all(b["iacc"] is not None for b in out["tail_bands"])
-            check("suite lite -> split -> room: RT60 %.1f s within 5%% in every band" % rt, max(abs(e) for e in errs) <= 5.0 and abs(rs["offset_samples"] - 144) <= 1,   # 144 samples = the synthetic reverb's own 3 ms direct delay
-
-                  "offset %d samples (true 144); errors %% %s; worst %.2f%%; taps %s (%d); pan map blocks %s" % (
-                      rs["offset_samples"], ["%.2f" % e for e in errs], max(abs(e) for e in errs), out["early_taps"]["status"], out["early_taps"]["count_found"],
-                      {k: len(v) for k, v in out["pan_map"].items()}))
+            o = rs["steps"][0]["start_sample"]
+            check("suite lite -> split -> room: RT60 %.1f s within 5%% in every band" % rt, max(abs(e) for e in errs) <= 5.0 and abs(o - 144) <= 1,
+                  "offset %d samples (true 144); errors %% %s; worst %.2f%%; taps %s (%d); pan map blocks %s; linearity: %s" % (
+                      o, ["%.2f" % e for e in errs], max(abs(e) for e in errs), out["early_taps"]["status"], out["early_taps"]["count_found"],
+                      {k: len(v) for k, v in out["pan_map"].items()}, out["linearity"].get("reason")))
+            if rt == 1.2:
+                from earnest import report
+                report.room_report(out, td / "lite_report.md", "lite set")
+                txt = (td / "lite_report.md").read_text(encoding="utf-8")
+                check("room on a lite set prints 'linearity: not run (lite set)' and still fits everything", "linearity: not run (lite set)" in txt and out["nonlinear_or_time_variant"] is None
+                      and out["early_taps"]["count_found"] == 5, "report contains the line: %s; nonlinear flag %s; taps %d" % ("linearity: not run (lite set)" in txt, out["nonlinear_or_time_variant"], out["early_taps"]["count_found"]))
 
 
 if __name__ == "__main__":
