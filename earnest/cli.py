@@ -20,7 +20,7 @@ def cmd_gen(a):
         save_json(out / ("probe_suite_%s.json" % a.suite), m)
         plots.suite_png(out / ("probe_suite_%s.png" % a.suite), x, m["blocks"], "earnest gen --suite %s" % a.suite)
         n = report.suite_report(m, out / "report.md", out)
-        print("gen --suite %s: %s (%.3f s; report %d lines)" % (a.suite, out / ("probe_suite_%s.wav" % a.suite), m["length_s"], n))
+        print("gen --suite %s: %s (%.3f s; report %d lines)" % (a.suite, out / ("probe_suite_%s.wav" % a.suite), m["total_s"], n))
         return 0
     sigs, manifest = gen.run(out)
     save_json(out / "gen.json", manifest)
