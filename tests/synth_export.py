@@ -34,7 +34,7 @@ def apply_irs(x, irs):
 
 
 def make_export(path, mode="full", mixes=(1.0, 0.8, 0.6, 0.3, 0.0), gaps_s=(5.0, 4.5, 9.0, 6.0), lead_s=3.0, fs_out=44100, subtype="PCM_16", normalize=True,
-                silent=(), irs=None, manifest_dir=None, gain=None):
+                silent=(), irs=None, manifest_dir=None, gain=None, dither=False, seed=5):
     """Returns truth dict: starts (48 kHz samples, multiples of 480), norm gain, irs. silent = pass indices (0-based) replaced by silence."""
     clip, man = suite.build(mode)
     irs = irs if irs is not None else reverb_irs()
@@ -66,6 +66,11 @@ def make_export(path, mode="full", mixes=(1.0, 0.8, 0.6, 0.3, 0.0), gaps_s=(5.0,
         q = resample_poly(p.astype(np.float64) * g, up, down, axis=0) if fs_out != FS else p * g
         a = starts[i] * up // down
         out[a:a + len(q)] = q[: n_out - a]
+    if dither and subtype == "PCM_16":      # TPDF dither, +-1 LSB, everywhere including the silent parts (what a DAW export with dither does)
+        rng = np.random.default_rng(seed)
+        for a in range(0, len(out), 4_000_000):
+            blk = out[a:a + 4_000_000]
+            blk += ((rng.random(blk.shape) - rng.random(blk.shape)) / 32768.0).astype(np.float32)
     sf.write(str(path), out, fs_out, subtype=subtype)
     if manifest_dir is not None:
         import json

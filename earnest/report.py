@@ -135,9 +135,9 @@ def split_report(r, path, wet_path):
         L.append("**Level calibration NOT applied:** " + "; ".join(cal["warnings"]))
     else:
         L.append("No calibration requested (needs --labels ending in 0).")
-    L += ["", "Position of the dry suite's time zero in the wet file (offset) for each copy. It includes where the clip was placed and the effect's own latency.", ""]
+    L += ["", "Clip start: where each copy of the suite begins in the wet file (the clip position, which also includes the effect's own latency).", ""]
     for st in r["steps"]:
-        L += ["## step %d%s: offset %.3f ms, start %.3f s%s" % (st["index"], (" (Mix %s)" % st["label"]) if st["label"] is not None else "", st["offset_ms"], st["start_s"],
+        L += ["## step %d%s: clip start %.3f s%s" % (st["index"], (" (Mix %s)" % st["label"]) if st["label"] is not None else "", st["start_s"],
                                                            "  **EMPTY: no trace of the suite found, position inferred from the gaps**" if st["inferred"] else ""),
               "| block | peak dBFS | RMS dBFS | length s | flags |", "|---|---|---|---|---|"]
         for b in st["blocks"]:

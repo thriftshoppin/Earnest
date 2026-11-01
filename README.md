@@ -3,6 +3,9 @@
 Turns stereo audio into things Claude can read: a **scene sheet** (`listen`), a **room card** with a fitted **reverb formula** (`room`), and a statistical
 re-render check (`resynth`). It never plays audio and contains no output-device code. Signals are written as WAV files and bounced offline in a DAW.
 
+**Quick start: put the exports in `inbox\`, double-click `earnest.bat`.** It analyzes every new or changed file, copies the newest results to `runs\latest\` and opens that folder.
+(`py -3.14 -m earnest run [--force]` does the same from a terminal; `inbox\processed.json` remembers what was done; your files are never moved or deleted.)
+
 ## How to run (three lines)
 1. Put the Cakewalk export (one file per room) in a folder.
 2. `py -3.14 -m earnest analyze-all <folder>` (one room: `py -3.14 -m earnest analyze <file> --room "Atrium"`).
@@ -65,6 +68,13 @@ Use `full` when you want the linearity check (needs the -30 dBFS and repeat swee
 - `gen --suite full` reproduces `earnest_probe_v1` (12 blocks, 190.5 s; the three noise-width blocks are copied from the bundled `probe\` reference). `lite` has the first 5 blocks needed by `room` (81.5 s).
 - `split <wet> <manifest.json> <out_dir> --repeats 5 --labels 100,80,60,30,0 [--dry-out <dir>]`: finds each copy of the suite independently (cross-correlating the dry sweep_L block with the wet file in chunks, never loading a big file whole), writes `step1_mix100\ ... step5_mix0\`, divides the Mix 0 level gain out of every file, reports each offset, peak/RMS per block, and names any silent pass EMPTY. Everything is read from the manifest (names, times); the dry signal comes from the file next to the manifest if there is one.
 - `analyze <export> --room "<name>" [--manifest ...] [--labels ...] [--out ...]`: split + calibration + `room` on every pass (against the generated dry blocks) + `mixcurve` + `stage`; writes `summary.md` (<= 120 lines), `summary.json`, `mixcurve.png` and one folder per pass with the usual room report, formula.json and room.png. Exit code 2 if a pass is empty or the Mix 0 pass is not clean dry.
+- `run [--inbox dir] [--force]`: the one command (also `earnest.bat`). Analyzes every .wav/.flac in `inbox\` that is new or changed, records it in `inbox\processed.json`, mirrors the newest results of every room into `runs\latest\` (`all_rooms_summary.md`, `<room>_summary.md`, `<room>_mixcurve.png`, `<room>_room.png` = the Mix 100 pass) and opens it in File Explorer. Prints one line per room (OK / EMPTY / not clean dry and why). Non-zero exit if anything was flagged.
 - `analyze-all <folder>`: `analyze` on every .wav/.flac there (room = text before the first `_` or `-` in the file name); writes `all_rooms_summary.md` (<= 100 lines) with one row per room and Mix level.
 - `mixcurve <room run folder> ... [--labels 100,80,...]`: the room metrics against Mix, one curve, flags for metrics that move more than 10% (dB values: 1 dB). A pass with no tail (Mix 0) gets no RT60/EDT/IACC.
 - `stage` (inside `analyze`): from noise_mid (input correlation +1), noise_wide (0), noise_side (-1): L/R correlation and side/mid dB of the direct part and of the tail (0.5 s after each burst ends, up to 5 s or the next burst; per octave 125 Hz-8 kHz), and the width gain (output minus input side/mid dB, defined for noise_wide only).
+
+## Conventions
+- **RT60 and EDT** are both measured from the **tail onset**: the first moment the smoothed tail energy (direct sound and detected taps masked) comes within 15 dB of its peak. The direct sound, the early taps and any pre-delay gap are not in the decay curve. For a pure exponential tail with no pre-delay this gives EDT = RT60. It is **not** the ISO 3382 EDT, which starts at the direct arrival and therefore includes the direct sound (with a strong direct sound that EDT is much shorter and mostly measures the direct-to-reverberant ratio). EDT of a noise-like tail in a single octave band is statistically noisy (about +-15 % per band); the mean over bands is steadier.
+- **Dry or near-dry steps** (tail under -40 dB re direct, e.g. the Mix 0 pass) show n/a for RT60, EDT and IACC and are left out of the Mix-curve "moves by" flags.
+- **Usable range** (summary column) = loudest sweep peak of a pass minus the RMS of that copy's silent head and end, both in the file's own dBFS scale before calibration. A 16-bit file's floor is about -96 dBFS with dither (digital silence reads as -140). Passes under 45 dB are flagged.
+- **Clip start s** = where a copy of the suite begins in the export file (clip position; it also includes the effect's own latency).

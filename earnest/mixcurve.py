@@ -65,8 +65,9 @@ def curves(steps) -> dict:
     ms = [metrics(s[1]) for s in steps]
     keys = ["M_LL", "M_LR", "M_RL", "M_RR", "tail_level_db", "rt60_s", "edt_s", "iacc", "drr_db", "c50_db", "c80_db", "pan_slope_direct", "pan_slope_tail"]
     flags = []
+    live = [m for m in ms if not m["no_tail"]]      # a dry step (Mix 0) has no reverb: it is left out of the "moves by" flags
     for k in keys:
-        v = [m[k] for m in ms if m[k] is not None]
+        v = [m[k] for m in live if m[k] is not None]
         if len(v) < 2:
             continue
         span = max(v) - min(v)
@@ -76,7 +77,7 @@ def curves(steps) -> dict:
                 flags.append({"metric": k, "span": round(span, 2), "rule": "moves by >= 1 dB"})
         elif span / base > FLAG:
             flags.append({"metric": k, "span": round(span, 3), "rule": "moves by > %d%% of its mean" % int(FLAG * 100)})
-    return {"labels": labels, "metrics": ms, "flags": flags}
+    return {"labels": labels, "metrics": ms, "flags": flags, "excluded_no_tail": [lb for lb, m in zip(labels, ms) if m["no_tail"]]}
 
 
 def _f(v, nd=3):
@@ -97,6 +98,8 @@ def report_lines(c: dict, title: str):
         for lb, m in zip(lab, c["metrics"]):
             L.append("| %s | %s |" % (lb, " | ".join(_f(v, nd) for v in m[key])))
     L += ["", "### Flags (metrics that move across the Mix steps)"]
+    if c.get("excluded_no_tail"):
+        L.append("- Mix steps with no tail (under %d dB re direct), left out of the flags and shown as n/a for RT60, EDT, IACC: %s" % (-NO_TAIL_DB, c["excluded_no_tail"]))
     L += ["- %s: %s (%s)" % (f["metric"], f["span"], f["rule"]) for f in c["flags"]] or ["- none"]
     L += ["", "Early taps per step: " + ", ".join("%s=%s" % (lb, m["taps"]) for lb, m in zip(lab, c["metrics"])),
           "Nonlinear/time-variant flag per step: " + ", ".join("%s=%s" % (lb, m["nonlinear"]) for lb, m in zip(lab, c["metrics"]))]

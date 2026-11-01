@@ -13,6 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from . import mixcurve, plots, report, room, stage, suite
+from .dsp import db
 from .io import FS, RUNS, new_run, save_json
 
 DEFAULT_LABELS = [100, 80, 60, 30, 0]
@@ -103,8 +104,16 @@ def analyze(export, room_name: str, manifest_path=None, labels=None, out=None, d
         blocks = suite.cut_blocks(src, manifest, st["start"])
         stats = {n: suite.block_stats(x) for n, x in blocks.items()}
         empty = [n for n, (pk, _) in stats.items() if pk < suite.EMPTY_DB]
-        row = {"index": st["index"], "label": label, "start_s": round(st["start"] / FS, 3), "offset_ms": round(st["start"] / FS * 1000.0, 3), "empty_blocks": empty,
+        row = {"index": st["index"], "label": label, "start_s": round(st["start"] / FS, 3), "empty_blocks": empty,
                "sweep_L_peak_dbfs": stats["sweep_L"][0], "sweep_L_rms_dbfs": stats["sweep_L"][1], "short": bool(any(len(x) < b["length_samples"] for x, b in zip(blocks.values(), manifest["blocks"])))}
+        # usable range from the file's own noise floor: RMS of the copy's silent head and end against the loudest sweep peak (all in the file's dBFS scale, before calibration)
+        sil = np.concatenate([src.read(st["start"], st["start"] + int(manifest.get("head_s", 2.0) * FS)),
+                              src.read(st["start"] + manifest["total_samples"] - int(manifest.get("end_s", 1.0) * FS), st["start"] + manifest["total_samples"])])
+        rms = float(np.sqrt(np.mean(sil ** 2))) if len(sil) else 0.0
+        floor = max(db(rms), -140.0) if rms > 0 else -140.0
+        peak_sw = max(stats["sweep_L"][0], stats["sweep_R"][0])
+        row.update({"noise_floor_dbfs": round(floor, 1), "digital_silence": bool(rms == 0.0), "signal_peak_dbfs": peak_sw, "usable_range_db": round(peak_sw - floor, 1),
+                    "low_range": bool(peak_sw - floor < MIN_RANGE_DB)})
         if st["inferred"] or "sweep_L" in empty or "sweep_R" in empty:
             row["status"] = "EMPTY"
             if not st["inferred"]:
@@ -119,9 +128,9 @@ def analyze(export, room_name: str, manifest_path=None, labels=None, out=None, d
         res, plot = room.run_room_sets(sets, clicks, [])
         sg = stage.compute(dry_w, blocks)
         row.update({"status": "ok", "room": res, "stage": sg})
-        row["min_decay_range_db"] = min([b["decay_range_db"] for b in res["tail_bands"] if b.get("decay_range_db") is not None] or [None])
-        low = [b["hz"] for b in res["tail_bands"] if b.get("decay_range_db") is not None and b["decay_range_db"] < MIN_RANGE_DB]
-        row["low_range_bands_hz"] = low
+        if row["low_range"]:
+            problems_note = "pass %d (Mix %s): usable range only %.1f dB (noise floor %.1f dBFS): RT60 fits are unreliable" % (st["index"], label, row["usable_range_db"], row["noise_floor_dbfs"])
+            summary.setdefault("warnings", []).append(problems_note)
         if not res["ir_looks_valid"]:
             problems.append("pass %d (Mix %s): the sweep does not deconvolve cleanly (IR decay %s dB, latency %s ms)" % (st["index"], label, res["ir_decay_db"], res["latency_ms"]))
         res2 = dict(res)
@@ -173,31 +182,33 @@ def summary_lines(s):
          "Passes expected: %s (Mix labels). Run time %.0f s, peak memory %.0f MB." % (s["labels"], s["seconds"], s["peak_memory_mb"]), ""]
     if s["problems"]:
         L += ["## PROBLEMS"] + ["- " + p for p in s["problems"]] + [""]
+    if s.get("warnings"):
+        L += ["## Warnings"] + ["- " + w for w in s["warnings"]] + [""]
     cal = s.get("calibration")
     if cal:
         L += ["## Level calibration (Mix 0 pass)", "- gain G = %s dB%s (measured over 200 Hz-8 kHz on sweep_L; divided out of every pass). Checks: %s" % (
             _fmt(cal.get("G_db"), 2), "" if cal.get("ok") else " NOT APPLIED", cal.get("checks") or "none"), ""]
-    L += ["## Passes", "| step | Mix | start s | offset ms | sweep_L peak dBFS | status |", "|---|---|---|---|---|---|"]
+    L += ["## Passes", "| step | Mix | clip start s | sweep peak dBFS | noise floor dBFS (silent head and end) | usable range dB | status |", "|---|---|---|---|---|---|---|"]
     for r in s["steps"]:
-        L.append("| %d | %s | %s | %s | %s | %s%s |" % (r["index"], r["label"], r["start_s"], r["offset_ms"], r.get("sweep_L_peak_dbfs"), r.get("status", "?"),
-                                                  (" (cut short)" if r.get("short") else "")))
+        fl = r.get("noise_floor_dbfs")
+        L.append("| %d | %s | %s | %s | %s | %s | %s%s |" % (r["index"], r["label"], r["start_s"], r.get("signal_peak_dbfs"),
+                                                          ("%s%s" % (_fmt(fl, 1), " (digital silence)" if r.get("digital_silence") else "")) if fl is not None else "n/a",
+                                                          ("%s%s" % (_fmt(r.get("usable_range_db"), 1), " LOW (<45)" if r.get("low_range") else "")) if fl is not None else "n/a",
+                                                          r.get("status", "?"), (" (cut short)" if r.get("short") else "")))
     ok = [r for r in s["steps"] if r.get("status") == "ok"]
     if ok:
         L += ["", "## Room numbers per Mix step (RT60, EDT, IACC = mean of the 250 Hz-4 kHz octave bands)",
-              "| Mix | M L>L | M L>R | M R>R | tail dB re direct | RT60 s | EDT s | IACC | DRR dB | C50 dB | C80 dB | pan slope direct | pan slope tail | taps | nonlinear | min decay range dB |",
-              "|" + "---|" * 16]
+              "| Mix | M L>L | M L>R | M R>R | tail dB re direct | RT60 s | EDT s | IACC | DRR dB | C50 dB | C80 dB | pan slope direct | pan slope tail | taps | nonlinear |",
+              "|" + "---|" * 15]
         for r in ok:
             m = mixcurve.metrics(r["room"])
-            L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 r["label"], _fmt(m["M_LL"], 3), _fmt(m["M_LR"], 3), _fmt(m["M_RR"], 3), _fmt(m["tail_level_db"]), _fmt(m["rt60_s"], 3), _fmt(m["edt_s"], 3), _fmt(m["iacc"], 3),
-                _fmt(m["drr_db"]), _fmt(m["c50_db"]), _fmt(m["c80_db"]), _fmt(m["pan_slope_direct"], 3), _fmt(m["pan_slope_tail"], 3), m["taps"], m["nonlinear"],
-                _fmt(m["min_decay_range_db"], 1)))
-        low = [(r["label"], r["low_range_bands_hz"]) for r in ok if r.get("low_range_bands_hz")]
-        if low:
-            L.append("- decay range under %d dB (RT60 fit unreliable): %s" % (MIN_RANGE_DB, "; ".join("Mix %s bands %s Hz" % (a, b) for a, b in low)))
+                _fmt(m["drr_db"]), _fmt(m["c50_db"]), _fmt(m["c80_db"]), _fmt(m["pan_slope_direct"], 3), _fmt(m["pan_slope_tail"], 3), m["taps"], m["nonlinear"]))
+        L.append("- n/a = the step has no tail (under %d dB re direct), e.g. the Mix 0 pass. EDT is measured from the tail onset, RT60 from the same point (see README)." % -mixcurve.NO_TAIL_DB)
         L += ["", "RT60 by octave band (s):", "| Mix | " + " | ".join("%d" % h for h in mixcurve.EDC_BANDS) + " |", "|---|" + "---|" * len(mixcurve.EDC_BANDS)]
         for r in ok:
-            L.append("| %s | %s |" % (r["label"], " | ".join(_fmt(b["rt60_s"], 3) for b in r["room"]["tail_bands"])))
+            L.append("| %s | %s |" % (r["label"], " | ".join(_fmt(v, 3) for v in mixcurve.metrics(r["room"])["rt60_by_band"])))
     if "mix0_sanity" in s:
         z = s["mix0_sanity"]
         L += ["", "Mix 0 sanity: %s (M L>L %s, M L>R %s, tail level at 1 kHz %s dB re direct)" % ("near identity" if z["identity"] else "NOT near identity", z["M_LL"], z["M_LR"], z["tail_level_db_1k"])]
@@ -205,7 +216,7 @@ def summary_lines(s):
     if mc:
         L += ["", "## Mix curve flags", "- " + ("; ".join("%s %s (%s)" % (f["metric"], f["span"], f["rule"]) for f in mc["flags"]) or "no metric moves across the steps"),
               "- plot: mixcurve.png (same numbers as the table above)"]
-    if ok and any("stage" in r for r in ok):
+    if ok and any(r.get("stage") for r in ok):
         L += ["", "## Stage (width): inputs mid (corr +1), wide (0), side (-1); S/M = side over mid energy in dB (clamped to +-60); tail corr per octave 125 Hz..8 kHz",
               "| Mix | input | in corr | in S/M | direct corr | direct S/M | tail corr (125..8k) | tail S/M broadband | width gain direct / tail dB |", "|---|---|---|---|---|---|---|---|---|"]
         for r in ok:
@@ -233,32 +244,39 @@ def analyze_all(folder, labels=None, manifest_path=None):
             results.append({"file": f.name, "room": name, "code": code, "summary": str(p), "data": s})
         except Exception as e:      # one bad file must not stop the rest
             results.append({"file": f.name, "room": name, "code": 3, "summary": None, "error": "%s: %s" % (type(e).__name__, e), "data": None})
-    L = ["# earnest all rooms", "", "Folder: %s. %d file(s). Each row: one room and one Mix step; numbers are single values (RT60, EDT, IACC = mean of 250 Hz-4 kHz bands)." % (folder, len(results)), ""]
+    bad = all_rooms_report(results, out_root / "all_rooms_summary.md", "Folder: %s" % folder)
+    save_json(out_root / "all_rooms_summary.json", [{k: v for k, v in r.items() if k != "data"} | {"problems": (r["data"] or {}).get("problems")} for r in results])
+    print("all_rooms_summary: %s" % (out_root / "all_rooms_summary.md"))
+    return (1 if bad else 0), out_root / "all_rooms_summary.md"
+
+
+def all_rooms_report(results, path, where) -> list:
+    """Writes the one-table summary (100 lines or fewer); returns the list of failed or flagged results."""
+    L = ["# earnest all rooms", "", "%s. %d file(s). Each row: one room and one Mix step; numbers are single values (RT60, EDT, IACC = mean of 250 Hz-4 kHz bands; n/a = no tail)." % (where, len(results)), ""]
     bad = [r for r in results if r["code"] != 0]
     if bad:
         L += ["## Failed or flagged"]
         for r in bad:
             L.append("- %s (%s): %s" % (r["room"], r["file"], r.get("error") or "; ".join(r["data"]["problems"]) or "exit code %d" % r["code"]))
         L.append("")
-    L += ["| room | Mix | M L>L / L>R | tail dB | RT60 s | EDT s | IACC | DRR dB | C50 dB | pan slope dir / tail | width gain dir / tail dB | corr dir / tail (wide) | S/M dir (side in) dB |", "|" + "---|" * 13]
+    L += ["| room | Mix | M L>L / L>R | tail dB | RT60 s | EDT s | IACC | DRR dB | C50 dB | pan slope dir / tail | width gain dir / tail dB | corr dir / tail (wide) | S/M dir (side in) dB | noise floor dBFS / range dB |", "|" + "---|" * 14]
     for r in results:
         s = r["data"]
         if not s:
             continue
         for st in s["steps"]:
             if st.get("status") != "ok":
-                L.append("| %s | %s | EMPTY | | | | | | | | | | |" % (r["room"], st["label"]))
+                L.append("| %s | %s | EMPTY | | | | | | | | | | | |" % (r["room"], st["label"]))
                 continue
             m = mixcurve.metrics(st["room"])
             wide = st["stage"].get("noise_wide") or {}
             side = st["stage"].get("noise_side") or {}
             wg = wide.get("width_gain_db") or {}
-            L.append("| %s | %s | %s / %s | %s | %s | %s | %s | %s | %s | %s / %s | %s / %s | %s / %s | %s |" % (
+            L.append("| %s | %s | %s / %s | %s | %s | %s | %s | %s | %s | %s / %s | %s / %s | %s / %s | %s | %s / %s%s |" % (
                 r["room"], st["label"], _fmt(m["M_LL"], 3), _fmt(m["M_LR"], 3), _fmt(m["tail_level_db"], 1), _fmt(m["rt60_s"], 2), _fmt(m["edt_s"], 2), _fmt(m["iacc"], 2), _fmt(m["drr_db"], 1),
                 _fmt(m["c50_db"], 1), _fmt(m["pan_slope_direct"], 2), _fmt(m["pan_slope_tail"], 2), _fmt(wg.get("direct"), 1), _fmt(wg.get("tail"), 1),
-                _fmt((wide.get("direct") or {}).get("corr"), 2), _fmt((wide.get("tail") or {}).get("broadband_corr"), 2), _fmt((side.get("direct") or {}).get("side_over_mid_db"), 1)))
+                _fmt((wide.get("direct") or {}).get("corr"), 2), _fmt((wide.get("tail") or {}).get("broadband_corr"), 2), _fmt((side.get("direct") or {}).get("side_over_mid_db"), 1),
+                _fmt(st.get("noise_floor_dbfs"), 1), _fmt(st.get("usable_range_db"), 1), " LOW" if st.get("low_range") else ""))
     L += ["", "Per-room detail: " + "; ".join("%s -> %s" % (r["room"], r["summary"]) for r in results if r["summary"])]
-    n = report.finish(L if len(L) <= ALL_MAX else L[: ALL_MAX - 1] + ["(cut at %d lines)" % ALL_MAX], out_root / "all_rooms_summary.md")
-    save_json(out_root / "all_rooms_summary.json", [{k: v for k, v in r.items() if k != "data"} | {"problems": (r["data"] or {}).get("problems")} for r in results])
-    print("all_rooms_summary: %s" % (out_root / "all_rooms_summary.md"))
-    return (1 if bad else 0), out_root / "all_rooms_summary.md"
+    report.finish(L if len(L) <= ALL_MAX else L[: ALL_MAX - 1] + ["(cut at %d lines)" % ALL_MAX], path)
+    return bad

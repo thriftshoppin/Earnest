@@ -172,7 +172,14 @@ def analyze_band(irs: dict, fc: float, fs: int = FS, tap_ms=()):
     for tm in tap_ms:
         c = pre + int(tm * fs / 1000.0)
         em[max(c - dw, pre + dw): c + dw] = 0.0
-    dec = dsp.decay(em[pre + dw:], fs)      # decay is measured from the end of the direct-sound window
+    # Tail onset: where the smoothed tail energy (taps masked) first comes within 15 dB of its peak. RT60 and EDT are measured from this onset, so the direct sound, the taps and
+    # any pre-delay gap are not part of the decay curve (this is not the ISO 3382 EDT, which starts at the direct arrival and so includes the direct sound).
+    env = dsp.smooth(em[pre + dw:], 0.002 * fs)
+    m = min(int(0.4 * fs), len(env))
+    pk = int(np.argmax(env[:m])) if m > 8 else 0
+    on = int(np.argmax(env[: pk + 1] >= env[pk] * ONSET_FRAC)) if m > 8 else 0
+    start = pre + dw + on
+    dec = dsp.decay(em[start:], fs)
     res = {"hz": fc, "level_db": round(db_pow(e_after / max(e_dir, dsp.EPS)), 2)}
     if dec is None:
         res.update({"rt60_s": None, "t20_s": None, "t30_s": None, "edt_s": None})
@@ -180,15 +187,11 @@ def analyze_band(irs: dict, fc: float, fs: int = FS, tap_ms=()):
     rt = dec["t30"] if dec["t30"] else dec["t20"]
     res.update({"rt60_s": _r(rt, 3), "t20_s": _r(dec["t20"], 3), "t30_s": _r(dec["t30"], 3), "edt_s": _r(dec["edt"], 3),
                 "decay_range_db": round(dec["dyn_range_db"], 1)})
-    env = dsp.smooth(em[pre + dw:], 0.002 * fs)
-    m = min(int(0.4 * fs), len(env))
-    pk = int(np.argmax(env[:m])) if m > 8 else 0
-    on = int(np.argmax(env[: pk + 1] >= env[pk] * ONSET_FRAC)) if m > 8 else 0
     res["pre_delay_ms"] = round((dw + on) / fs * 1000.0, 2)
     res["buildup_ms"] = round((pk - on) / fs * 1000.0, 2)
     # tail correlation between the two output channels over the measurable decay
-    cut = pre + int(min(TAIL_MAX_S, (dec["t"][-1] if len(dec["t"]) else 1.0)) * fs)
-    ia = pre + dw + on
+    cut = start + int(min(TAIL_MAX_S, (dec["t"][-1] if len(dec["t"]) else 1.0)) * fs)
+    ia = start
     vals = []
     for side, h in hb.items():
         seg = h[ia:cut]
@@ -196,7 +199,7 @@ def analyze_band(irs: dict, fc: float, fs: int = FS, tap_ms=()):
         if v is not None:
             vals.append(v)
     res["iacc"] = round(float(np.mean(vals)), 3) if vals else None
-    res["modulation"] = _modulation(e[pre:], dec, fs)
+    res["modulation"] = _modulation(e[start:], dec, fs)
     return res, dec, hb
 
 

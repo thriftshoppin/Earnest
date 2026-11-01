@@ -245,11 +245,11 @@ def calibrate(blocks_of, dry: np.ndarray, manifest: dict) -> dict:
     tail = w[t0:, 0]
     peak = float(np.abs(w[:, 0]).max())
     if len(tail) and peak > 0:
-        tdb = db(np.abs(tail).max() / peak)
-        out["checks"]["tail_after_sweep_db_re_peak"] = round(tdb, 1)
+        tdb = db(float(np.sqrt(np.mean(tail ** 2))) / peak)      # RMS, so the dither of an ordinary 16-bit export (peak about -84 dBFS) does not count as a tail
+        out["checks"]["tail_after_sweep_rms_db_re_peak"] = round(tdb, 1)
         if tdb > -80:
             ok = False
-            out["warnings"].append("the Mix 0 pass is not clean dry: a tail at %.1f dB re peak follows its sweep (needs below -80 dB)" % tdb)
+            out["warnings"].append("the Mix 0 pass is not clean dry: a tail at %.1f dB (RMS) re peak follows its sweep (needs below -80 dB)" % tdb)
     if ok:
         out.update({"G": G, "G_db": round(db(G), 3), "ok": True})
     else:
@@ -332,7 +332,7 @@ def run_split(wet_path, manifest_path, out_dir, dry_out=None, repeats: int = 1, 
                     dd.mkdir(parents=True, exist_ok=True)
                     write_wav(dd / (b["name"] + ".wav"), dry[b["start_sample"]: b["start_sample"] + b["length_samples"]])
         cut_short = (st["start"] + manifest["total_samples"]) > src.n + FS
-        result["steps"].append({"index": st["index"], "label": st["label"], "start_s": round(st["start"] / FS, 3), "offset_ms": round(st["start"] / FS * 1000.0, 3),
+        result["steps"].append({"index": st["index"], "label": st["label"], "start_s": round(st["start"] / FS, 3),
                                 "start_sample": int(st["start"]), "inferred": st["inferred"], "folder": str(folder), "blocks": rows,
                                 "empty_blocks": [r["name"] for r in rows if r["empty"]], "cut_short": bool(cut_short),
                                 "all_empty": all(r["empty"] for r in rows if r["name"].startswith("sweep_"))})

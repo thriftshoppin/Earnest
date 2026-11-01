@@ -84,6 +84,11 @@ def cmd_analyze_all(a):
     return code
 
 
+def cmd_run(a):
+    from . import run
+    return run.run(a.inbox, a.force, a.latest, a.manifest, _labels(a), not a.no_open)
+
+
 def cmd_mixcurve(a):
     from . import mixcurve
     labels = _labels(a) or [Path(f).name for f in a.runs]
@@ -153,6 +158,14 @@ def main(argv=None):
     aa.add_argument("--manifest")
     aa.add_argument("--labels")
     aa.set_defaults(fn=cmd_analyze_all)
+    ru = sub.add_parser("run", help="the one command: analyze every new or changed export in the inbox folder, mirror the newest results into runs/latest and open it")
+    ru.add_argument("--inbox", help="default: the inbox folder next to this tool")
+    ru.add_argument("--force", action="store_true", help="redo every file")
+    ru.add_argument("--latest", help=argparse.SUPPRESS)
+    ru.add_argument("--manifest")
+    ru.add_argument("--labels")
+    ru.add_argument("--no-open", action="store_true", help="do not open the results folder in File Explorer")
+    ru.set_defaults(fn=cmd_run)
     mc = sub.add_parser("mixcurve", help="metrics against Mix for several room run folders (each with room.json)")
     mc.add_argument("runs", nargs="+")
     mc.add_argument("--labels")

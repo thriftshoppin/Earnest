@@ -12,7 +12,7 @@ PASS  direct matrix recovered (1.0 / 0.1)  M = {'L': [0.977, 0.098], 'R': [0.098
 PASS  linearity: linear system passes (flag false)  -30 dBFS vs -18 dBFS worst 0.000 dB; repeat vs first -18 dBFS worst 0.000 dB
 PASS  linearity: soft-clipped system is flagged  -30 dBFS vs -18 dBFS worst 3.770 dB
 PASS  pan transfer map: identity system returns the input pan (+-0.05)  in [-1.0, -0.5, 0.0, 0.5, 1.0] -> out [-1.0, -0.5, 0.0, 0.5, 1.0]
-PASS  resynth smoke: RT60 error mean within 15% per band (info limit)  means [-1.897, -0.974, 1.625, 0.87, 0.367, 0.93, 0.899]
+PASS  resynth smoke: RT60 error mean within 15% per band (info limit)  means [-2.159, -1.656, 0.998, 0.435, -0.234, 0.232, 0.2]
 PASS  suite identity (full, 12 blocks): every block equals its gen signal within 1e-6  12 blocks, worst |diff| 7.45e-09, offset 0 samples
 PASS  suite effect (7 ms delay, gain 0.5): offset found within +-1 sample  true 336 samples (7.000 ms), found 336 samples (7.000 ms)
 PASS  suite effect: blocks equal 0.5 x dry within 1e-6  worst |diff| 3.73e-09
