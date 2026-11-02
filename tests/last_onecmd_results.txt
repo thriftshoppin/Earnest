@@ -1,17 +1,22 @@
 PASS  EDT convention: exact exponential decay, EDT = RT60 within 0.5 %  RT60 0.3: EDT 0.3000 s (-0.000 %), T20 0.3000 s, T30 0.3000 s; RT60 1.2: EDT 1.2000 s (-0.000 %), T20 1.2000 s, T30 1.2000 s; RT60 2.5: EDT 2.5000 s (-0.000 %), T20 2.5000 s, T30 2.5000 s
 PASS  EDT convention: noise tail with no pre-delay through the real sweep chain, mean EDT over the 7 bands within 5 % of RT60 (single bands are noisy, listed)  RT60 0.3: EDT per band [0.317, 0.28, 0.276, 0.276, 0.291, 0.297, 0.3], mean 0.291 s (-3.0 %), worst single band 8.0 %; RT60 per band [0.269, 0.302, 0.311, 0.307, 0.302, 0.301, 0.3] | RT60 1.2: EDT per band [0.986, 1.271, 1.112, 1.164, 1.17, 1.233, 1.197], mean 1.162 s (-3.2 %), worst single band 17.8 %; RT60 per band [1.215, 1.211, 1.198, 1.2, 1.207, 1.189, 1.195] | RT60 2.5: EDT per band [2.585, 2.42, 2.547, 2.46, 2.495, 2.518, 2.505], mean 2.504 s (0.2 %), worst single band 3.4 %; RT60 per band [2.494, 2.511, 2.508, 2.509, 2.494, 2.5, 2.494]
-PASS  CLI: analyze --manifest <lite manifest> --dry <lite dry wav> runs and exits 0  exit 0, 41 s; stdout summary: C:\Users\SysAdmin\tools\earnest\runs\20261101-165912-analyze-liteX\summary.md
-run time 39 s, peak memory 591 MB; stderr 
+PASS  CLI: analyze --manifest <lite manifest> --probe <lite probe wav> runs and exits 0  exit 0, 47 s; stdout 25-analyze-liteX\step5_mix0
+RESULT: OK
+
+summary: C:\Users\SysAdmin\tools\earnest\runs\20261101-184525-analyze-liteX\summary.md
+run time 46 s, peak memory 591 MB; stderr 
 PASS  dry step (Mix 0): RT60/EDT/IACC are n/a everywhere (data, summary table and by-octave table) and the step is out of the flags  Mix 0 rt60 None edt None iacc None; rows starting '| 0 |' with n/a: 2; excluded [0]; flags now ['M_LL', 'M_LR', 'M_RL', 'M_RR', 'tail_level_db', 'drr_db', 'c50_db', 'c80_db', 'pan_slope_direct', 'pan_slope_tail']; true RT60 is constant (1.2 s) across Mix 100-30
-PASS  noise floor from the silent head/end of a dithered 16-bit file is within 3 dB of the expected value (-96.3 dBFS)  measured [-93.4, -93.4, -93.4, -93.4, -93.4] dBFS per pass; expected -96.3 dBFS (the nominal 16-bit figure -90 is 6.3 dB higher than this); usable range [93.4, 92.3, 91.2, 89.3, 87.0] dB
+PASS  noise floor from the silent head/end of a dithered 16-bit file is within 3 dB of the file's own measured floor (independent read of its first 2.5 s)  reported [-93.4, -93.4, -93.4, -93.4, -93.4] dBFS per pass; independent RMS of the file's silent lead-in -93.3 dBFS; usable range [93.4, 92.3, 91.2, 89.3, 87.0] dB. (Textbook TPDF+rounding would be -96.3 dBFS; libsndfile truncates instead of rounding, which adds a DC offset and gives the higher value. The nominal 16-bit figure -90 is 3.3 dB above the measured one.)
 PASS  summary says 'clip start s' and has no 'offset ms'  found clip start: True; found 'offset ms': False
 PASS  digital silence in the head/end is reported as such (-140 dBFS) and not flagged low-range  floors [-140.0, -140.0, -140.0, -140.0, -140.0]; low_range [False, False, False, False, False]
-PASS  CLI: split --repeats 5 --labels ... --dry-out writes step1_mix100..step5_mix0, report.md says 'clip start' and the calibration  exit 0, 8 s; folders ['step1_mix100', 'step2_mix80', 'step3_mix60', 'step4_mix30', 'step5_mix0']; calibration line: ["**Level calibration from the Mix 0 pass: G = 11.512 dB, divided out of every cut file.** Checks: {'clicks_mono_LR_corr': 0.9998, 'tail_after_sweep_rms_db_re_peak': -86.9}."]; stdout split: 5 copy(ies) cut into C:\Users\SysAdmin\AppData\Local\Temp\tmp_a9l47w1\cli_split (report 53 lines)
-PASS  CLI: mixcurve <5 step folders> --labels ... writes report.md and mixcurve.png  exit 0, 2 s; stdout mixcurve: C:\Users\SysAdmin\tools\earnest\runs\20261101-170040-mixcurve (report 63 lines); stderr 
-PASS  CLI: analyze-all --manifest: two rooms, empty pass listed as failed, exit 1  exit 1, 68 s; 21 lines; stderr 
-PASS  run: latest\ has the expected files, the room with a silent pass is flagged EMPTY, exit 1, processed.json has both files  exit 1, 68 s; missing files []; lines: ['alpha: OK', 'beta: EMPTY - pass 3 (Mix 60) left no trace of the sweep: it is EMPTY (placed from the gaps between the other passes)']
-PASS  run again: both files skipped as unchanged, nothing analyzed  1 s; analyzed 0, skipped 2 unchanged
-PASS  run --force: both files redone  68 s; analyzed 2, skipped 0 unchanged
-PASS  run after adding a third file: only the new file is analyzed, latest\ now holds all three rooms  37 s; analyzed 1, skipped 2 unchanged
+PASS  CLI: split --repeats 5 --labels ... --dry-out writes step1_mix100..step5_mix0, report.md says 'clip start' and the calibration  exit 0, 23 s; folders ['step1_mix100', 'step2_mix80', 'step3_mix60', 'step4_mix30', 'step5_mix0']; calibration line: ["**Level calibration from the Mix 0 pass: G = 11.512 dB, divided out of every cut file.** Checks: {'clicks_mono_LR_corr': 0.9998, 'tail_after_sweep_rms_db_re_peak': -86.9}."]; stdout 0]
+RESULT: WARN
+split: 5 copy(ies) cut into C:\Users\SysAdmin\AppData\Local\Temp\tmpwxbo0zoe\cli_split (report 53 lines)
+PASS  CLI: mixcurve <5 step folders> --labels ... writes report.md and mixcurve.png  exit 0, 2 s; stdout mixcurve: C:\Users\SysAdmin\tools\earnest\runs\20261101-184722-mixcurve (report 63 lines); stderr 
+PASS  CLI: analyze-all --manifest: two rooms, empty pass listed as failed, exit 1  exit 1, 91 s; 27 lines; stderr 
+PASS  run: latest\ has the expected files, the room with a silent pass is flagged EMPTY, exit 1, processed.json has both files  exit 1, 86 s; missing files []; lines: ['alpha: OK', 'alpha_100-80-60-30-0.wav: WARN', 'beta: EMPTY - beta-100-80-60-30-0.wav pass 3 (Mix 60): hop LEVEL failed: this pass is empty: sweep blocks peak at -240.0 dBFS (needs more than -90 dBFS) [EMPTY]; pass 3 (Mix 60) is EMPTY', 'beta-100-80-60-30-0.wav: WARN']
+PASS  run again: both files skipped as unchanged, nothing analyzed  2 s; analyzed 0, skipped 2 unchanged
+PASS  run --force: both files redone  85 s; analyzed 2, skipped 0 unchanged
+PASS  run after adding a third file: only the new file is analyzed, latest\ now holds all three rooms  46 s; analyzed 1, skipped 2 unchanged
 PASS  run never touches the user's files (names, sizes, modified times unchanged)  2 files compared
-PASS  all_rooms_summary.md in latest\ is 100 lines or fewer and lists the failed room on top  26 lines
+PASS  all_rooms_summary.md in latest\ is 100 lines or fewer and lists the failed room on top  33 lines

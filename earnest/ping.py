@@ -82,7 +82,9 @@ def run(quick: bool = False, base=None) -> int:
     inbox = pdir / "inbox"
     inbox.mkdir(exist_ok=True)
     mode = "lite" if quick else "full"
+    print("ping: building the %s probe signal ..." % mode, flush=True)
     clip, man = suite.build(mode)
+    print("ping: probe built (%.1f s); making the synthetic room, muted-channel and noise-only files ..." % (time.time() - t0), flush=True)
     mpath = pdir / "ping_manifest.json"
     mpath.write_text(json.dumps(man), encoding="utf-8")
     irs = reverb_irs()

@@ -1,0 +1,6 @@
+PASS  reset.bat --yes: every folder of runs\ (including latest) moved into archive\<timestamp>\runs, nothing deleted  archived ['a', 'b', 'latest', 'ping']; archive folder 20261101-183558; reset exit code 0
+PASS  reset.bat: processed.json archived with its old content and replaced by an empty one  archived rooms ['old']; new file {'version': 2, 'rooms': {}}
+PASS  reset.bat: the user's inbox files are byte-identical (SHA-256) and data\ is intact  3 inbox files compared, data\trace_log.csv compared
+PASS  reset.bat: dependencies checked (versions printed), ping ran in the new runs\ and the console ended with READY  exit 0; ping.txt verdict ['PING OK: 14 checks over 68 hops, 0 lost']; versions printed: ['python 3.14.8', 'numpy       2.5.4', 'scipy       1.18.1', 'soundfile   0.14.0', 'matplotlib  3.11.2', 'pyloudnorm  0.2.0']
+PASS  the old runs\ folders were not left behind in runs\ (only the fresh ping folder)  runs\ now holds ['ping']
+PASS  --purge-archive 30: the old archive folder leaves archive\ and is in the Recycle Bin (not hard-deleted); the new archive stays  gone from archive True; in the Recycle Bin True; stdout: ['4. send archive folders older than 30.0 day(s) to the Recycle Bin', 'to the Recycle Bin: 20200101-000000 -> ok']

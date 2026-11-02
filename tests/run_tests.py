@@ -18,7 +18,7 @@ RESULTS = []
 
 def check(name, ok, detail):
     RESULTS.append((name, ok, detail))
-    print("%s  %s  %s" % ("PASS" if ok else "FAIL", name, detail))
+    print("%s  %s  %s" % ("PASS" if ok else "FAIL", name, detail), flush=True)
 
 
 def synth_system(rt60, rho=0.3, seed=1, tail_start_ms=75.0, level_db=-10.0, taps=None, direct_xtalk=0.1):

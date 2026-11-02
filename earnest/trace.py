@@ -25,6 +25,12 @@ LOG_DEFAULT = ROOT / "data" / "trace_log.csv"      # EARNEST_TRACE_LOG overrides
 ACTIVE: list = []          # traces that have not been finished (printed by Ctrl+C)
 
 
+def _live(msg):
+    """One timestamped line per hop start/end, flushed at once, so a console always shows what the code is doing (EARNEST_LIVE=0 turns it off)."""
+    if os.environ.get("EARNEST_LIVE", "1") != "0":
+        print("[%s] %s" % (datetime.now().strftime("%H:%M:%S"), msg), flush=True)
+
+
 class HopFail(Exception):
     def __init__(self, hop, reason, cause=""):
         super().__init__("%s: %s" % (hop, reason))
@@ -45,6 +51,7 @@ class Hop:
 
     def __enter__(self):
         self.t0 = time.time()
+        _live("%s  %-8s started" % (self.trace.label, self.name))
         self._timer = threading.Timer(self.trace.watchdog_s, self._stuck)
         self._timer.daemon = True
         self._timer.start()
@@ -104,6 +111,7 @@ class Trace:
         return Hop(self, name)
 
     def _record(self, h: Hop):
+        _live("%s  %-8s %-4s %5.1f s  %s" % (self.label, h.name, h.status, time.time() - h.t0, h.msg))
         self.hops.append({"hop": h.name, "status": h.status, "msg": h.msg, "cause": h.cause, "data": h.data, "seconds": round(time.time() - h.t0, 2),
                           "at": datetime.now().strftime("%H:%M:%S")})
 

@@ -1,4 +1,4 @@
-"""Test for reset.bat: dummy runs, processed.json, latest folder and inbox files in a TEMPORARY root; run `reset.bat --yes --root <tmp>`; verify everything is archived (nothing deleted),
+﻿"""Test for reset.bat: dummy runs, processed.json, latest folder and inbox files in a TEMPORARY root; run `reset.bat --yes --root <tmp>`; verify everything is archived (nothing deleted),
 processed.json is empty, the inbox files are byte-identical, data\\ is intact, dependencies were checked and ping ran. Then `--purge-archive` sends an old archive folder to the Recycle Bin.
 Plain script: python tests/run_reset_test.py (about 2.5 minutes)."""
 from __future__ import annotations
@@ -28,8 +28,34 @@ def recycle_bin_names() -> list:
     return [x.strip() for x in r.stdout.splitlines()]
 
 
+T0 = time.time()
+
+
+def step(msg):
+    print("[%5.1fs] %s" % (time.time() - T0, msg), flush=True)
+
+
+def run_live(args, label):
+    """Run a command and echo every output line as it appears; return (returncode, full stdout)."""
+    step("RUN  %s" % label)
+    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, cwd=str(ROOT), bufsize=1, env={**__import__("os").environ, "PYTHONUNBUFFERED": "1"})
+    lines = []
+    for ln in proc.stdout:
+        lines.append(ln)
+        print("[%5.1fs]   | %s" % (time.time() - T0, ln.rstrip()), flush=True)
+    proc.wait()
+    step("DONE %s (exit %d)" % (label, proc.returncode))
+    return proc.returncode, "".join(lines)
+
+
+class _P:
+    def __init__(self, rc, out):
+        self.returncode, self.stdout = rc, out
+
+
 def main():
     t0 = time.time()
+    step("building dummy runs, inbox, data and an old archive folder in a temporary root")
     with tempfile.TemporaryDirectory() as td:
         root = Path(td)
         for d in ("a", "b", "latest", "ping"):
@@ -46,7 +72,8 @@ def main():
         data_hash = sha(root / "data" / "trace_log.csv")
         (root / "archive" / "20200101-000000").mkdir(parents=True)
         (root / "archive" / "20200101-000000" / "old.txt").write_text("old", encoding="utf-8")
-        p = subprocess.run(["cmd", "/c", str(ROOT / "reset.bat"), "--yes", "--root", str(root)], capture_output=True, text=True, cwd=str(ROOT))
+        p = _P(*run_live(["cmd", "/c", str(ROOT / "reset.bat"), "--yes", "--root", str(root)], "reset.bat --yes (archive, new processed.json, dependency check, ping)"))
+        step("verifying the result on disk")
         arch = [d for d in (root / "archive").iterdir() if d.name != "20200101-000000"]
         a = arch[0] if len(arch) == 1 else None
         archived = sorted(x.name for x in (a / "runs").iterdir()) if a and (a / "runs").exists() else []
@@ -62,7 +89,8 @@ def main():
         check("reset.bat: dependencies checked (versions printed), ping ran in the new runs\\ and the console ended with READY", "PING OK" in ping_txt and "READY" in p.stdout and "numpy" in p.stdout and "pyloudnorm" in p.stdout and p.returncode == 0,
               "exit %d; ping.txt verdict %s; versions printed: %s" % (p.returncode, [ln for ln in ping_txt.splitlines() if ln.startswith("PING")], [ln.strip() for ln in p.stdout.splitlines() if ln.strip().startswith(("numpy", "scipy", "soundfile", "matplotlib", "pyloudnorm", "python"))]))
         check("the old runs\\ folders were not left behind in runs\\ (only the fresh ping folder)", left == ["ping"], "runs\\ now holds %s" % left)
-        p2 = subprocess.run(["cmd", "/c", str(ROOT / "reset.bat"), "--yes", "--root", str(root), "--purge-archive", "30", "--no-ping"], capture_output=True, text=True, cwd=str(ROOT))
+        p2 = _P(*run_live(["cmd", "/c", str(ROOT / "reset.bat"), "--yes", "--root", str(root), "--purge-archive", "30", "--no-ping"], "reset.bat --purge-archive 30 --no-ping"))
+        step("checking archive folder and Recycle Bin")
         gone = not (root / "archive" / "20200101-000000").exists()
         in_bin = "20200101-000000" in recycle_bin_names()
         check("--purge-archive 30: the old archive folder leaves archive\\ and is in the Recycle Bin (not hard-deleted); the new archive stays", gone and in_bin and a.exists() or (gone and in_bin),

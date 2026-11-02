@@ -1,5 +1,13 @@
 # Earnest (earnest-ear, Phase 1)
 
+**What it is:** an offline audio-analysis tool for studying a reverb/stereo effect (the Univerb study). You bounce a known probe signal through the effect in a DAW (Cakewalk/BandLab), drop the exports in `inbox\`, and Earnest turns them into short written summaries and numbers that Claude can read: room character per Mix level (RT60, EDT, tail level, direct-to-reverberant ratio, early taps, stereo width) and a fitted reverb formula.
+**What it does for you:** one command (`earnest.bat`, or `py -3.14 -m earnest run`) from DAW exports to summaries, with telemetry that says exactly where data is lost (every stage reports OK / WARN / FAIL with the numbers it received), a self-test (`earnest ping`), and a clean-slate command (`reset.bat`). Checks are meant to be fast and verbose: every stage prints a timestamped line as it starts and finishes (turn off with env `EARNEST_LIVE=0`).
+**What it never does:** play audio (no output-device code), move or delete your files, or push anything anywhere by itself.
+**Status (2026-11-01):** all 76 test checks pass on the current code (see Tests). Not yet done: speed work on the room stage, coloured console output, a non-clipping probe export for the real data (the `-3 dBFS` union passes are clipped), and any test on a real Univerb export.
+**What it is:** an offline audio-analysis tool for studying a reverb/stereo effect (the Univerb study). You bounce a known probe signal through the effect in a DAW (Cakewalk/BandLab), drop the exports in `inbox\`, and Earnest turns them into short written summaries and numbers that Claude can read: room character per Mix level (RT60, EDT, tail level, direct-to-reverberant ratio, early taps, stereo width) and a fitted reverb formula.
+**What it does for you:** one command (`earnest.bat`, or `py -3.14 -m earnest run`) from DAW exports to summaries, with telemetry that says exactly where data is lost (every stage reports OK / WARN / FAIL with the numbers it received), a self-test (`earnest ping`), and a clean-slate command (`reset.bat`). Checks are meant to be fast and verbose: every stage prints a timestamped line as it starts and finishes (turn off with env `EARNEST_LIVE=0`).
+**What it never does:** play audio (no output-device code), move or delete your files, or push anything anywhere by itself.
+**Status (2026-11-01):** all 76 test checks pass on the current code (see Tests). Not yet done: speed work on the room stage, coloured console output, a non-clipping probe export for the real data (the `-3 dBFS` union passes are clipped), and any test on a real Univerb export.
 Turns stereo audio into things Claude can read: a **scene sheet** (`listen`), a **room card** with a fitted **reverb formula** (`room`), and a statistical
 re-render check (`resynth`). It never plays audio and contains no output-device code. Signals are written as WAV files and bounced offline in a DAW.
 
@@ -20,7 +28,7 @@ FILE (container, rate, channels, bit depth, length), READ (per channel: frames, 
 MATCH (each channel against each sweep of the probe: peak-to-noise in dB and where it was found; the detection threshold is the largest value Gaussian noise would reach over all lags, plus 25 %; the sweep's
 processing gain is used, so a probe below the file's bit step can still be found and the trace says how far below), SPLIT (copies found), LEVEL (calibration gain G, usable range), ROOM (direct matrix, IR energy, tail, taps), WRITE.
 The first FAIL stops that file (with the likely cause) and the batch goes on to the next file; `--stop-on-fail` stops the whole batch. A hop over 10 minutes is a FAIL ("stuck at hop X"); Ctrl+C prints the trace so far.
-`trace.txt` and `trace.json` are saved per file (in `runs\...	race\`, mirrored to `runs\latest\`), and every hop is appended to `data	race_log.csv`. A failed hop never blanks the summary: what was read stays in it.
+`trace.txt` and `trace.json` are saved per file (in `runs\...\trace\`, mirrored to `runs\latest\`), and every hop is appended to `data\trace_log.csv`. A failed hop never blanks the summary: what was read stays in it.
 `py -3.14 -m earnest ping` writes known files (clean probe as 24-bit FLAC with dither, the same through a crossfade effect twice, a 16-bit 44.1 kHz copy, a right-channel-muted copy, noise only), runs the real chain and
 checks every hop against the known truth; about 100 s, output in `runs\ping\`. `reset.bat [--yes] [--purge-archive DAYS]` moves `runs\*` and `processed.json` into `archive\<time>\` (nothing deleted; old archives go to
 the Recycle Bin only with --purge-archive), checks the Python packages and runs ping; it ends with READY or the failing hops.
@@ -76,7 +84,7 @@ Use `full` when you want the linearity check (needs the -30 dBFS and repeat swee
 - A dual-mono dry sweep identifies only the sum of the two input paths.
 
 ## Tests
-`py -3.14 tests\run_tests.py` (synthetic IRs with known answers, PASS/FAIL with numbers; about 2 minutes). `tests\make_demo.py <dir>` builds a demo dry/wet folder pair from a known synthetic reverb.
+Each test script runs in a console with live output (step and hop lines with timestamps, then PASS/FAIL with the numbers) and writes `tests\last_*_console.txt` and `last_*_results.txt`. Current results (2026-11-01): `run_tests.py` 22 checks / 120 s, `run_suite_tests.py` 19 / 383 s, `run_onecmd_tests.py` 16 / 455 s, `run_trace_tests.py` 13 / 382 s, `run_reset_test.py` 6 / 104 s: 76 checks, 0 failed. `tests\make_demo.py <dir>` builds a demo dry/wet folder pair from a known synthetic reverb. What each test proves, and what it cannot, is in `TESTS.md`.
 
 ## Multi-pass workflow (commands)
 - `gen --suite full` reproduces `earnest_probe_v1` (12 blocks, 190.5 s; the three noise-width blocks are copied from the bundled `probe\` reference). `lite` has the first 5 blocks needed by `room` (81.5 s).
