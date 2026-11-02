@@ -1,22 +1,16 @@
-"""`analyze` / `analyze-all`: one command from a DAW export to a short written summary. Never plays audio.
-
-An export holds N passes of the SAME suite clip (default 5, Mix 100, 80, 60, 30, 0). The last pass (Mix 0) is the dry reference: it fixes one gain G that is divided out of
-every pass, then each pass is analysed against the GENERATED dry blocks (room, stage), and the passes are compared (mixcurve)."""
+"""`analyze` / `analyze-all`: from DAW exports to short written summaries, through the traced pipeline (pipeline.py). Never plays audio."""
 from __future__ import annotations
 
 import ctypes
-import re
-import time
 from ctypes import wintypes
 from pathlib import Path
 
-import numpy as np
+import soundfile as sf
 
-from . import mixcurve, plots, report, room, stage, suite
-from .dsp import db
-from .io import FS, RUNS, new_run, save_json
+from . import mixcurve, pipeline, probe, report, stage, suite
+from .io import new_run, save_json
+from .pipeline import DEFAULT_LABELS, classify, room_from_filename, slug  # noqa: F401  (re-exported)
 
-DEFAULT_LABELS = [100, 80, 60, 30, 0]
 SUMMARY_MAX = 120
 ALL_MAX = 100
 MIN_RANGE_DB = 45.0
@@ -35,179 +29,66 @@ def peak_memory_mb() -> float:
     return pmc.PeakWorkingSetSize / 1e6
 
 
-def slug(s: str) -> str:
-    return re.sub(r"[^A-Za-z0-9]+", "", s) or "room"
-
-
-def room_from_filename(path) -> str:
-    return re.split(r"[_\-]", Path(path).stem, maxsplit=1)[0]
-
-
-def _sets_from_blocks(dry: np.ndarray, manifest: dict, wet_blocks: dict):
-    by = {b["name"]: b for b in manifest["blocks"]}
-
-    def d(name):
-        b = by[name]
-        return dry[b["start_sample"]: b["start_sample"] + b["length_samples"]]
-    sets = {"a": {}, "b": {}, "rep": {}}
-    for key, suf in (("a", ""), ("b", "_m30"), ("rep", "_rep")):
-        for side in ("L", "R"):
-            n = "sweep_%s%s" % (side, suf)
-            if n in by and n in wet_blocks:
-                sets[key][side] = ((d("sweep_" + side) if key == "rep" else d(n)), wet_blocks[n])
-    clicks = {n: (d(n), wet_blocks[n]) for n in ("clicks_panned", "clicks_mono") if n in by and n in wet_blocks}
-    dry_w = {n: d(n) for n in stage.BLOCKS if n in by}
-    return sets, clicks, dry_w
-
-
 def _fmt(v, nd=2):
     return "n/a" if v is None else "%.*f" % (nd, v)
 
 
-def analyze(export, room_name: str, manifest_path=None, labels=None, out=None, dry_path=None, quiet: bool = False):
-    """Returns (exit_code, summary_md_path, summary dict). Exit code 0 = clean; 2 = a pass is empty / Mix 0 not clean dry / could not find the passes."""
-    t_start = time.time()
-    labels = list(labels) if labels else list(DEFAULT_LABELS)
-    manifest = suite.load_manifest(manifest_path or suite.PROBE_JSON)
-    out = Path(out) if out else new_run("analyze-" + slug(room_name))
-    out.mkdir(parents=True, exist_ok=True)
-    summary = {"room": room_name, "export": str(export), "labels": labels, "manifest": manifest.get("name"), "problems": [], "steps": [], "version": 1}
-    problems = summary["problems"]
-    try:
-        src, dry, steps, info = suite.plan_steps(export, manifest, len(labels), labels, dry_path)
-    except SystemExit as e:
-        problems.append(str(e))
-        return _finish(out, summary, manifest, None, t_start, quiet, code=2)
-    fmt = ["%s, %d Hz, %d ch, %.1f s" % (src.info.subtype, src.fs_in, src.info.channels, src.n_in / src.fs_in)]
-    if src.fs_in != FS:
-        fmt.append("resampled to 48000 Hz")
-    if src.info.subtype == "PCM_16":
-        fmt.append("16-bit: floor near -90 dBFS, long tails are cut by it")
-    summary["format"] = fmt
-    for st in steps:
-        if st["inferred"]:
-            problems.append("pass %d (Mix %s) left no trace of the sweep: it is EMPTY (placed from the gaps between the other passes)" % (st["index"], st["label"]))
-    # calibration from the Mix 0 pass
-    cal = {"G": 1.0, "G_db": 0.0, "ok": False, "warnings": ["no Mix 0 pass"], "checks": {}}
-    if labels[-1] in (0, "0"):
-        raw = suite.cut_blocks(src, manifest, steps[-1]["start"], ("sweep_L", "clicks_mono"))
-        cal = suite.calibrate(lambda n: raw[n], dry, manifest)
-    summary["calibration"] = cal
-    for w in cal["warnings"]:
-        problems.append("Mix 0 pass: " + w)
-    G = cal["G"] if cal["ok"] else 1.0
-    step_results = []
-    for st in steps:
-        label = st["label"]
-        folder = out / suite.step_dirname(st)
-        folder.mkdir(exist_ok=True)
-        blocks = suite.cut_blocks(src, manifest, st["start"])
-        stats = {n: suite.block_stats(x) for n, x in blocks.items()}
-        empty = [n for n, (pk, _) in stats.items() if pk < suite.EMPTY_DB]
-        row = {"index": st["index"], "label": label, "start_s": round(st["start"] / FS, 3), "empty_blocks": empty,
-               "sweep_L_peak_dbfs": stats["sweep_L"][0], "sweep_L_rms_dbfs": stats["sweep_L"][1], "short": bool(any(len(x) < b["length_samples"] for x, b in zip(blocks.values(), manifest["blocks"])))}
-        # usable range from the file's own noise floor: RMS of the copy's silent head and end against the loudest sweep peak (all in the file's dBFS scale, before calibration)
-        sil = np.concatenate([src.read(st["start"], st["start"] + int(manifest.get("head_s", 2.0) * FS)),
-                              src.read(st["start"] + manifest["total_samples"] - int(manifest.get("end_s", 1.0) * FS), st["start"] + manifest["total_samples"])])
-        rms = float(np.sqrt(np.mean(sil ** 2))) if len(sil) else 0.0
-        floor = max(db(rms), -140.0) if rms > 0 else -140.0
-        peak_sw = max(stats["sweep_L"][0], stats["sweep_R"][0])
-        row.update({"noise_floor_dbfs": round(floor, 1), "digital_silence": bool(rms == 0.0), "signal_peak_dbfs": peak_sw, "usable_range_db": round(peak_sw - floor, 1),
-                    "low_range": bool(peak_sw - floor < MIN_RANGE_DB)})
-        if st["inferred"] or "sweep_L" in empty or "sweep_R" in empty:
-            row["status"] = "EMPTY"
-            if not st["inferred"]:
-                problems.append("pass %d (Mix %s): the sweep blocks are empty (peak under -90 dBFS)" % (st["index"], label))
-            summary["steps"].append(row)
-            continue
-        if empty:
-            problems.append("pass %d (Mix %s): empty blocks %s" % (st["index"], label, ", ".join(empty)))
-        for n in blocks:
-            blocks[n] = blocks[n] / G
-        sets, clicks, dry_w = _sets_from_blocks(dry, manifest, blocks)
-        res, plot = room.run_room_sets(sets, clicks, [])
-        sg = stage.compute(dry_w, blocks)
-        row.update({"status": "ok", "room": res, "stage": sg})
-        if row["low_range"]:
-            problems_note = "pass %d (Mix %s): usable range only %.1f dB (noise floor %.1f dBFS): RT60 fits are unreliable" % (st["index"], label, row["usable_range_db"], row["noise_floor_dbfs"])
-            summary.setdefault("warnings", []).append(problems_note)
-        if not res["ir_looks_valid"]:
-            problems.append("pass %d (Mix %s): the sweep does not deconvolve cleanly (IR decay %s dB, latency %s ms)" % (st["index"], label, res["ir_decay_db"], res["latency_ms"]))
-        res2 = dict(res)
-        res2["label"] = label
-        save_json(folder / "room.json", res2)
-        save_json(folder / "formula.json", __import__("earnest.formula", fromlist=["build"]).build(res, "%s step %d Mix %s" % (room_name, st["index"], label)))
-        report.room_report(res, folder / "report.md", "%s, step %d, Mix %s" % (room_name, st["index"], label))
-        plots.room_png(folder / "room.png", res, plot, "earnest room: %s step %d Mix %s" % (room_name, st["index"], label))
-        del blocks, sets, clicks, plot
-        summary["steps"].append(row)
-        step_results.append((label, res))
-    curve = None
-    if len(step_results) >= 2:
-        curve, _ = mixcurve.write(step_results, out, room_name)
-        summary["mixcurve"] = {"labels": curve["labels"], "metrics": curve["metrics"], "flags": curve["flags"]}
-    # Mix 0 sanity line
-    s0 = next((s for s in summary["steps"] if s["label"] in (0, "0") and s.get("status") == "ok"), None)
-    if s0:
-        m = s0["room"]["direct_matrix"]
-        L0 = s0["room"]["inputs"][0]
-        diag = m[L0][0]
-        cross = m[L0][1]
-        lvl = s0["room"]["tail_bands"][3]["level_db"]
-        ident = abs(diag - 1) < 0.1 and abs(cross) < 0.1 and lvl < -40
-        summary["mix0_sanity"] = {"identity": bool(ident), "M_LL": round(diag, 4), "M_LR": round(cross, 4), "tail_level_db_1k": lvl}
-    return _finish(out, summary, manifest, curve, t_start, quiet)
+def analyze(export, room_name: str, manifest_path=None, labels=None, out=None, dry_path=None, quiet: bool = False, stop_on_fail: bool = False, probe_path=None, mix=None):
+    """One export file (single pass, or several passes in one file) as one room. `dry_path` = the dry reference EXPORT (single-pass use), `probe_path` = the generated probe
+    signal file (default: the one next to the manifest, else regenerated), `mix` = the Mix label of a single-pass file."""
+    members = [{"path": export, "label": mix}]
+    dry = {"path": dry_path} if dry_path else None
+    return pipeline.process_room(room_name, members, dry, manifest_path, labels, out, quiet, stop_on_fail, True, None, probe_path)
 
 
-def _finish(out, summary, manifest, curve, t_start, quiet, code=None):
-    problems = summary["problems"]
-    summary["seconds"] = round(time.time() - t_start, 1)
-    summary["peak_memory_mb"] = round(peak_memory_mb(), 0)
-    bad = any(("EMPTY" in p or "empty" in p or "Mix 0 pass" in p or "not clean" in p) for p in problems)
-    summary["exit_code"] = code if code is not None else (2 if bad else 0)
-    lines = summary_lines(summary)
-    p = out / "summary.md"
-    n = report.finish(lines, p) if len(lines) <= SUMMARY_MAX else report.finish(lines[: SUMMARY_MAX - 1] + ["(cut at %d lines; summary.json has everything)" % SUMMARY_MAX], p)
-    slim = {k: v for k, v in summary.items()}
-    save_json(out / "summary.json", slim)
-    if not quiet:
-        print("summary: %s" % p)
-        for pr in problems:
-            print("PROBLEM: " + pr)
-    return summary["exit_code"], p, summary
+def _file_line(f: dict) -> str:
+    if "peak_dbfs" not in f:
+        return "| %s | %s | n/a | n/a | n/a | n/a | n/a | %s: %s |" % (f.get("file", "?"), f.get("role"), f.get("status"), f.get("reason", ""))
+    best = {}
+    for s in f.get("match") or []:
+        best["%s>ch%s" % (s["sweep"].replace("sweep_", ""), "LR"[s["channel"]])] = "%.0f dB@%.0f ms" % (s["peak_to_noise_db"], s["copy_start_ms"])
+    return "| %s | %s | %.1f s, %d Hz, %s | %s | %s | %s | %s | %s |" % (
+        f.get("file"), f.get("role"), f.get("seconds", 0), f.get("samplerate", 0), ("%s-bit" % f["bits"]) if f.get("bits") else "?",
+        "/".join("%.1f" % p for p in f["peak_dbfs"]), "/".join("%.1f" % p for p in f["rms_dbfs"]), "/".join("%.1f" % p for p in f["floor_dbfs"]),
+        ", ".join("%s %s" % (k, v) for k, v in best.items()) or "not reached", f.get("status", "?"))
 
 
 def summary_lines(s):
-    L = ["# earnest analyze: %s" % s["room"], "", "Export: %s" % s["export"], "Format: %s" % "; ".join(s.get("format", ["unknown"])),
-         "Passes expected: %s (Mix labels). Run time %.0f s, peak memory %.0f MB." % (s["labels"], s["seconds"], s["peak_memory_mb"]), ""]
+    L = ["# earnest analyze: %s" % s["room"], "", "Run time %.0f s, peak memory %.0f MB. Labels for multi-pass files: %s." % (s["seconds"], s["peak_memory_mb"], s["labels"]), ""]
     if s["problems"]:
         L += ["## PROBLEMS"] + ["- " + p for p in s["problems"]] + [""]
     if s.get("warnings"):
         L += ["## Warnings"] + ["- " + w for w in s["warnings"]] + [""]
+    L += ["## Files (what each file contained, whether or not it could be analysed)",
+          "| file | role | length, rate, bits | peak dBFS L/R | RMS dBFS L/R | noise floor dBFS L/R | matched filter vs probe sweeps (peak/noise@lag) | result |", "|---|---|---|---|---|---|---|---|"]
+    for f in s["files"]:
+        L.append(_file_line(f))
+        if f.get("status") == "FAIL" and f.get("cause"):
+            L.append("- most likely cause for %s: %s" % (f.get("file"), f["cause"]))
     cal = s.get("calibration")
     if cal:
-        L += ["## Level calibration (Mix 0 pass)", "- gain G = %s dB%s (measured over 200 Hz-8 kHz on sweep_L; divided out of every pass). Checks: %s" % (
-            _fmt(cal.get("G_db"), 2), "" if cal.get("ok") else " NOT APPLIED", cal.get("checks") or "none"), ""]
-    L += ["## Passes", "| step | Mix | clip start s | sweep peak dBFS | noise floor dBFS (silent head and end) | usable range dB | status |", "|---|---|---|---|---|---|---|"]
+        L += ["", "## Level calibration", "- gain G = %s dB%s (sweep_L over 200 Hz-8 kHz against the generated probe; divided out of every pass). Checks: %s" % (
+            _fmt(cal.get("G_db"), 2), "" if cal.get("ok") else " NOT APPLIED", cal.get("checks") or "none")]
+    L += ["", "## Passes", "| step | Mix | clip start s | sweep peak dBFS | noise floor dBFS (silent head and end) | usable range dB | status |", "|---|---|---|---|---|---|---|"]
     for r in s["steps"]:
         fl = r.get("noise_floor_dbfs")
-        L.append("| %d | %s | %s | %s | %s | %s | %s%s |" % (r["index"], r["label"], r["start_s"], r.get("signal_peak_dbfs"),
+        L.append("| %s | %s | %s | %s | %s | %s | %s%s |" % (r.get("index"), r.get("label"), r.get("start_s"), r.get("signal_peak_dbfs", "n/a"),
                                                           ("%s%s" % (_fmt(fl, 1), " (digital silence)" if r.get("digital_silence") else "")) if fl is not None else "n/a",
                                                           ("%s%s" % (_fmt(r.get("usable_range_db"), 1), " LOW (<45)" if r.get("low_range") else "")) if fl is not None else "n/a",
                                                           r.get("status", "?"), (" (cut short)" if r.get("short") else "")))
     ok = [r for r in s["steps"] if r.get("status") == "ok"]
+    order = sorted(ok, key=lambda r: -r["label"] if isinstance(r.get("label"), (int, float)) else 1)
     if ok:
         L += ["", "## Room numbers per Mix step (RT60, EDT, IACC = mean of the 250 Hz-4 kHz octave bands)",
-              "| Mix | M L>L | M L>R | M R>R | tail dB re direct | RT60 s | EDT s | IACC | DRR dB | C50 dB | C80 dB | pan slope direct | pan slope tail | taps | nonlinear |",
-              "|" + "---|" * 15]
-        for r in ok:
+              "| Mix | M L>L | M L>R | M R>R | tail dB re direct | RT60 s | EDT s | IACC | DRR dB | C50 dB | C80 dB | pan slope direct | pan slope tail | taps | nonlinear |", "|" + "---|" * 15]
+        for r in order:
             m = mixcurve.metrics(r["room"])
             L.append("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
                 r["label"], _fmt(m["M_LL"], 3), _fmt(m["M_LR"], 3), _fmt(m["M_RR"], 3), _fmt(m["tail_level_db"]), _fmt(m["rt60_s"], 3), _fmt(m["edt_s"], 3), _fmt(m["iacc"], 3),
                 _fmt(m["drr_db"]), _fmt(m["c50_db"]), _fmt(m["c80_db"]), _fmt(m["pan_slope_direct"], 3), _fmt(m["pan_slope_tail"], 3), m["taps"], m["nonlinear"]))
         L.append("- n/a = the step has no tail (under %d dB re direct), e.g. the Mix 0 pass. EDT is measured from the tail onset, RT60 from the same point (see README)." % -mixcurve.NO_TAIL_DB)
         L += ["", "RT60 by octave band (s):", "| Mix | " + " | ".join("%d" % h for h in mixcurve.EDC_BANDS) + " |", "|---|" + "---|" * len(mixcurve.EDC_BANDS)]
-        for r in ok:
+        for r in order:
             L.append("| %s | %s |" % (r["label"], " | ".join(_fmt(v, 3) for v in mixcurve.metrics(r["room"])["rt60_by_band"])))
     if "mix0_sanity" in s:
         z = s["mix0_sanity"]
@@ -219,7 +100,7 @@ def summary_lines(s):
     if ok and any(r.get("stage") for r in ok):
         L += ["", "## Stage (width): inputs mid (corr +1), wide (0), side (-1); S/M = side over mid energy in dB (clamped to +-60); tail corr per octave 125 Hz..8 kHz",
               "| Mix | input | in corr | in S/M | direct corr | direct S/M | tail corr (125..8k) | tail S/M broadband | width gain direct / tail dB |", "|---|---|---|---|---|---|---|---|---|"]
-        for r in ok:
+        for r in order:
             for nm in stage.BLOCKS:
                 g = r["stage"].get(nm)
                 if not g or "error" in g:
@@ -232,41 +113,107 @@ def summary_lines(s):
     return L
 
 
-def analyze_all(folder, labels=None, manifest_path=None):
+# ----------------------------------------------------------------------------- folders
+
+def plan_folder(folder):
+    """Reads every .wav/.flac in the folder (headers and a hash) and decides roles. Returns dict(files, rooms, dry, duplicates, notes, all)."""
     folder = Path(folder)
-    files = sorted([p for p in folder.iterdir() if p.suffix.lower() in (".wav", ".flac")])
-    results = []
-    out_root = new_run("analyze-all")
+    files = sorted(p for p in folder.iterdir() if p.suffix.lower() in (".wav", ".flac"))
+    seen, dups, keep = {}, [], []
     for f in files:
-        name = room_from_filename(f)
+        h = probe.file_hash(f)
+        if h in seen:
+            dups.append({"file": f.name, "duplicate_of": seen[h]})
+            continue
+        seen[h] = f.name
+        keep.append(f)
+    manifest = suite.load_manifest(suite.PROBE_JSON)
+    dry, rooms, notes = [], {}, []
+    for f in keep:
+        c = classify(f)
         try:
-            code, p, s = analyze(f, name, manifest_path, labels, out=out_root / slug(name), quiet=True)
-            results.append({"file": f.name, "room": name, "code": code, "summary": str(p), "data": s})
-        except Exception as e:      # one bad file must not stop the rest
-            results.append({"file": f.name, "room": name, "code": 3, "summary": None, "error": "%s: %s" % (type(e).__name__, e), "data": None})
-    bad = all_rooms_report(results, out_root / "all_rooms_summary.md", "Folder: %s" % folder)
+            i = sf.info(str(f))
+            secs = i.frames / i.samplerate
+        except Exception:
+            secs = 0.0
+        multi = secs >= 1.6 * manifest["total_s"]
+        if c["role"] == "dry":
+            dry.append(f)
+        elif multi:
+            rooms.setdefault(room_from_filename(f), []).append({"path": f, "label": None})
+        else:
+            rooms.setdefault(c["room"], []).append({"path": f, "label": c["mix"]})
+    dry_member = None
+    if len(dry) == 1:
+        dry_member = {"path": dry[0]}
+    elif len(dry) > 1:
+        notes.append("more than one dry reference file (%s): none used, no calibration" % ", ".join(d.name for d in dry))
+    elif any(m["label"] is not None for ms in rooms.values() for m in ms):
+        notes.append("no dry reference file (a file whose name starts with 'dry'): single-pass room files are not calibrated")
+    return {"files": keep, "rooms": rooms, "dry": dry_member, "duplicates": dups, "notes": notes, "all": files}
+
+
+def process_folder(folder, labels=None, manifest_path=None, out_root=None, stop_on_fail=False, quiet=True, plan=None, only_rooms=None, cache=None):
+    """Runs every room of a folder. Returns (results, plan, out_root): results = [{room, file, code, summary, data}]."""
+    plan = plan or plan_folder(folder)
+    out_root = Path(out_root) if out_root else new_run("analyze-all")
+    results = []
+    cache = {} if cache is None else cache
+    for room_name, members in plan["rooms"].items():
+        if only_rooms is not None and room_name not in only_rooms:
+            continue
+        members = sorted(members, key=lambda m: -m["label"] if m["label"] is not None else 1)
+        names = ", ".join(Path(m["path"]).name for m in members)
+        try:
+            code, p, s = pipeline.process_room(room_name, members, plan["dry"], manifest_path, labels, out_root / slug(room_name), quiet, stop_on_fail, True, cache)
+            results.append({"room": room_name, "file": names, "code": code, "summary": str(p), "data": s})
+        except Exception as e:      # one bad room must not stop the rest
+            results.append({"room": room_name, "file": names, "code": 3, "summary": None, "error": "%s: %s" % (type(e).__name__, e), "data": None})
+        if stop_on_fail and results[-1]["code"] != 0:
+            break
+    return results, plan, out_root
+
+
+def analyze_all(folder, labels=None, manifest_path=None, stop_on_fail=False):
+    results, plan, out_root = process_folder(folder, labels, manifest_path, stop_on_fail=stop_on_fail, quiet=False)
+    bad = all_rooms_report(results, out_root / "all_rooms_summary.md", "Folder: %s" % folder, plan)
     save_json(out_root / "all_rooms_summary.json", [{k: v for k, v in r.items() if k != "data"} | {"problems": (r["data"] or {}).get("problems")} for r in results])
     print("all_rooms_summary: %s" % (out_root / "all_rooms_summary.md"))
     return (1 if bad else 0), out_root / "all_rooms_summary.md"
 
 
-def all_rooms_report(results, path, where) -> list:
+def all_rooms_report(results, path, where, plan=None) -> list:
     """Writes the one-table summary (100 lines or fewer); returns the list of failed or flagged results."""
-    L = ["# earnest all rooms", "", "%s. %d file(s). Each row: one room and one Mix step; numbers are single values (RT60, EDT, IACC = mean of 250 Hz-4 kHz bands; n/a = no tail)." % (where, len(results)), ""]
+    L = ["# earnest all rooms", "", "%s. %d room(s). Each row: one room and one Mix step; numbers are single values (RT60, EDT, IACC = mean of 250 Hz-4 kHz bands; n/a = no tail)." % (where, len(results)), ""]
     bad = [r for r in results if r["code"] != 0]
     if bad:
         L += ["## Failed or flagged"]
         for r in bad:
             L.append("- %s (%s): %s" % (r["room"], r["file"], r.get("error") or "; ".join(r["data"]["problems"]) or "exit code %d" % r["code"]))
         L.append("")
-    L += ["| room | Mix | M L>L / L>R | tail dB | RT60 s | EDT s | IACC | DRR dB | C50 dB | pan slope dir / tail | width gain dir / tail dB | corr dir / tail (wide) | S/M dir (side in) dB | noise floor dBFS / range dB |", "|" + "---|" * 14]
+    if plan:
+        for n in plan["notes"]:
+            L.append("- NOTE: " + n)
+        for d in plan["duplicates"]:
+            L.append("- DUPLICATE: %s has the same content as %s and was skipped" % (d["file"], d["duplicate_of"]))
+        if plan["notes"] or plan["duplicates"]:
+            L.append("")
+    L += ["## Files (every file in the folder, with what was read from it)", "| file | role | length, rate, bits | peak dBFS L/R | RMS dBFS L/R | noise floor dBFS L/R | matched filter vs probe sweeps | result |", "|---|---|---|---|---|---|---|---|"]
+    seen = set()
+    for r in results:
+        for f in (r["data"] or {}).get("files", []):
+            if f.get("file") in seen:
+                continue
+            seen.add(f.get("file"))
+            L.append(_file_line(f))
+    L += ["", "| room | Mix | M L>L / L>R | tail dB | RT60 s | EDT s | IACC | DRR dB | C50 dB | pan slope dir / tail | width gain dir / tail dB | corr dir / tail (wide) | S/M dir (side in) dB | noise floor dBFS / range dB |", "|" + "---|" * 14]
     for r in results:
         s = r["data"]
         if not s:
             continue
-        for st in s["steps"]:
+        for st in sorted(s["steps"], key=lambda x: -x["label"] if isinstance(x.get("label"), (int, float)) else 1):
             if st.get("status") != "ok":
-                L.append("| %s | %s | EMPTY | | | | | | | | | | | |" % (r["room"], st["label"]))
+                L.append("| %s | %s | %s | | | | | | | | | | | |" % (r["room"], st.get("label"), st.get("status")))
                 continue
             m = mixcurve.metrics(st["room"])
             wide = st["stage"].get("noise_wide") or {}

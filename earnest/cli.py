@@ -63,7 +63,22 @@ def cmd_split(a):
     out.mkdir(parents=True, exist_ok=True)
     labels = _labels(a)
     reps = a.repeats if a.repeats else (len(labels) if labels else 1)
+    from . import pipeline, trace
+    tr = trace.Trace(Path(a.wet).name)
+    tr.out_dir = out
+    man = suite.load_manifest(a.manifest)
+    try:
+        pipeline.ingest(a.wet, man, suite.dry_signal(man, a.dry), labels or [None] * reps, tr, {})
+    except trace.HopFail as e:
+        tr.finish(out)
+        print("split stopped at hop %s: %s (most likely: %s)" % (e.hop, e.reason, e.cause))
+        return 2
     r = suite.run_split(a.wet, a.manifest, out, Path(a.dry_out) if a.dry_out else None, reps, labels, a.dry)
+    cal = r["calibration"]
+    tr.add("LEVEL", "OK" if cal.get("applied") else "WARN", ("G = %.3f dB divided out of every cut file; checks %s" % (cal["G_db"], cal["checks"])) if cal.get("applied") else
+           ("no calibration: " + "; ".join(cal.get("warnings") or ["no Mix 0 label"])))
+    tr.add("WRITE", "OK", "%d cop%s cut into %s; empty blocks per step: %s" % (len(r["steps"]), "y" if len(r["steps"]) == 1 else "ies", out, [len(s["empty_blocks"]) for s in r["steps"]]))
+    tr.finish(out)
     save_json(out / "split.json", r)
     n = report.split_report(r, out / "report.md", a.wet)
     empties = [(s["index"], s["empty_blocks"]) for s in r["steps"] if s["empty_blocks"]]
@@ -73,20 +88,25 @@ def cmd_split(a):
 
 def cmd_analyze(a):
     from . import analyze
-    code, p, s = analyze.analyze(a.export, a.room, a.manifest, _labels(a), a.out, a.dry)
+    code, p, s = analyze.analyze(a.export, a.room, a.manifest, _labels(a), a.out, a.dry, stop_on_fail=a.stop_on_fail, probe_path=a.probe, mix=a.mix)
     print("run time %.0f s, peak memory %.0f MB" % (s["seconds"], s["peak_memory_mb"]))
     return code
 
 
 def cmd_analyze_all(a):
     from . import analyze
-    code, p = analyze.analyze_all(a.folder, _labels(a), a.manifest)
+    code, p = analyze.analyze_all(a.folder, _labels(a), a.manifest, a.stop_on_fail)
     return code
 
 
 def cmd_run(a):
     from . import run
-    return run.run(a.inbox, a.force, a.latest, a.manifest, _labels(a), not a.no_open)
+    return run.run(a.inbox, a.force, a.latest, a.manifest, _labels(a), not a.no_open, a.stop_on_fail)
+
+
+def cmd_ping(a):
+    from . import ping
+    return ping.run(a.quick)
 
 
 def cmd_mixcurve(a):
@@ -151,13 +171,20 @@ def main(argv=None):
     an.add_argument("--manifest")
     an.add_argument("--labels", help="default 100,80,60,30,0")
     an.add_argument("--out")
-    an.add_argument("--dry")
+    an.add_argument("--dry", help="dry reference EXPORT (the probe exported without the effect; single-pass use)")
+    an.add_argument("--probe", help="the generated probe signal file (default: the one next to the manifest, else regenerated)")
+    an.add_argument("--mix", type=int, help="Mix label of a single-pass file")
+    an.add_argument("--stop-on-fail", action="store_true", help="stop at the first failed hop")
     an.set_defaults(fn=cmd_analyze)
     aa = sub.add_parser("analyze-all", help="analyze every .wav/.flac in a folder (room name = text before the first _ or -)")
     aa.add_argument("folder")
     aa.add_argument("--manifest")
     aa.add_argument("--labels")
+    aa.add_argument("--stop-on-fail", action="store_true", help="abort the whole batch at the first failure")
     aa.set_defaults(fn=cmd_analyze_all)
+    pg = sub.add_parser("ping", help="self-test: pushes known files (clean, effect, channel lost, noise only, 16-bit) through the real chain and checks every hop")
+    pg.add_argument("--quick", action="store_true", help="use the short lite probe")
+    pg.set_defaults(fn=cmd_ping)
     ru = sub.add_parser("run", help="the one command: analyze every new or changed export in the inbox folder, mirror the newest results into runs/latest and open it")
     ru.add_argument("--inbox", help="default: the inbox folder next to this tool")
     ru.add_argument("--force", action="store_true", help="redo every file")
@@ -165,6 +192,7 @@ def main(argv=None):
     ru.add_argument("--manifest")
     ru.add_argument("--labels")
     ru.add_argument("--no-open", action="store_true", help="do not open the results folder in File Explorer")
+    ru.add_argument("--stop-on-fail", action="store_true", help="abort the whole batch at the first failure")
     ru.set_defaults(fn=cmd_run)
     mc = sub.add_parser("mixcurve", help="metrics against Mix for several room run folders (each with room.json)")
     mc.add_argument("runs", nargs="+")
@@ -196,7 +224,13 @@ def main(argv=None):
     c.add_argument("--csv", default=str(crosscheck.CSV))
     c.set_defaults(fn=crosscheck.run_cmd)
     a = p.parse_args(argv)
-    return a.fn(a)
+    try:
+        return a.fn(a)
+    except KeyboardInterrupt:
+        from . import trace
+        trace.print_active()
+        print("interrupted (Ctrl+C): the trace so far is printed above")
+        return 130
 
 
 if __name__ == "__main__":

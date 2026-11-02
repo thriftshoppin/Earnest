@@ -1,5 +1,6 @@
-"""`run`: the one command. Processes every export in the inbox folder (new or changed files only), mirrors the newest results into runs\\latest\\ and opens that folder.
-Never moves, renames or deletes the user's files; never plays audio."""
+"""`run`: the one command. Processes the exports in the inbox folder (new or changed ones only), mirrors the newest results into runs\\latest\\ and opens that folder.
+Never moves, renames or deletes the user's files; never plays audio. Single-pass files are grouped into rooms by name (`union100.flac` = room union, Mix 100; `dry*.flac` = the
+dry reference), several-pass files are one room each (see pipeline.py)."""
 from __future__ import annotations
 
 import json
@@ -9,7 +10,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import analyze
+from . import analyze, pipeline
 from .io import ROOT, RUNS, save_json
 
 INBOX = ROOT / "inbox"
@@ -17,66 +18,85 @@ LATEST = RUNS / "latest"
 STATE = "processed.json"
 
 
-def _sig(p: Path) -> dict:
-    st = p.stat()
-    return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+def _sig(p: Path) -> list:
+    st = Path(p).stat()
+    return [Path(p).name, st.st_size, st.st_mtime_ns]
 
 
 def _load_state(inbox: Path) -> dict:
     f = inbox / STATE
     if f.exists():
         try:
-            return json.loads(f.read_text(encoding="utf-8"))
+            d = json.loads(f.read_text(encoding="utf-8"))
+            if d.get("version") == 2:
+                return d
         except Exception:
             pass
-    return {"version": 1, "files": {}}
+    return {"version": 2, "rooms": {}}
 
 
-def _status_line(room: str, data: dict) -> str:
+def _room_sig(members, dry_member) -> list:
+    return sorted([_sig(m["path"]) for m in members]) + ([["dry"] + _sig(dry_member["path"])] if dry_member else [])
+
+
+def _room_lines(room: str, data: dict) -> list:
+    out = []
     probs = data.get("problems") or []
-    if not probs:
-        return "%s: OK" % room
-    kind = "EMPTY" if any(("EMPTY" in p or "empty" in p) for p in probs) else ("not clean dry" if any("Mix 0" in p for p in probs) else "flagged")
-    return "%s: %s - %s" % (room, kind, "; ".join(probs)[:300])
+    kind = "OK" if not probs else ("EMPTY" if any(("EMPTY" in p or "empty" in p) for p in probs) else ("not clean dry" if any("Mix 0" in p or "dry" in p for p in probs) else "flagged"))
+    out.append("%s: %s%s" % (room, kind, (" - " + "; ".join(probs)[:400]) if probs else ""))
+    for f in data.get("files", []):
+        hop = f.get("failed_hop")
+        out.append("    %s: %s%s" % (f.get("file", "?"), f.get("status", "?"), (" at hop %s: %s" % (hop, f.get("reason", ""))) if hop else ""))
+    return out
 
 
-def run(inbox=None, force: bool = False, latest=None, manifest=None, labels=None, open_explorer: bool = True) -> int:
+def run(inbox=None, force: bool = False, latest=None, manifest=None, labels=None, open_explorer: bool = True, stop_on_fail: bool = False) -> int:
     inbox = Path(inbox) if inbox else INBOX
     latest = Path(latest) if latest else LATEST
     inbox.mkdir(parents=True, exist_ok=True)
-    files = sorted(p for p in inbox.iterdir() if p.suffix.lower() in (".wav", ".flac"))
     state = _load_state(inbox)
-    if not files:
-        print("inbox is empty: put the Cakewalk exports (.wav or .flac, one per room) in %s and run again" % inbox)
+    plan = analyze.plan_folder(inbox)
+    if not plan["all"]:
+        print("inbox is empty: put the Cakewalk exports (.wav or .flac) in %s and run again" % inbox)
         return 0
-    lines, done, skipped = [], [], []
-    for f in files:
-        room = analyze.room_from_filename(f)
-        sig = _sig(f)
-        old = state["files"].get(f.name)
-        if (not force and old and old.get("size") == sig["size"] and old.get("mtime_ns") == sig["mtime_ns"]
-                and (Path(old.get("run_folder", "")) / "summary.json").exists()):
-            skipped.append(f.name)
-            print("skipping %s (unchanged since the last run)" % f.name)
+    print("inbox: %d file(s), %d room(s)%s" % (len(plan["all"]), len(plan["rooms"]), (", dry reference: %s" % Path(plan["dry"]["path"]).name) if plan["dry"] else ", no dry reference"))
+    for n in plan["notes"]:
+        print("NOTE: " + n)
+    for d in plan["duplicates"]:
+        print("DUPLICATE: %s has the same content as %s and is skipped" % (d["file"], d["duplicate_of"]))
+    done, skipped, failed = [], [], []
+    cache = {}
+    for room_name, members in plan["rooms"].items():
+        sig = _room_sig(members, plan["dry"])
+        old = state["rooms"].get(room_name)
+        if not force and old and old.get("sig") == sig and (Path(old.get("run_folder", "")) / "summary.json").exists():
+            skipped.append(room_name)
+            print("skipping room %s (its files are unchanged since the last run)" % room_name)
             continue
-        print("analyzing %s as room '%s' ..." % (f.name, room))
+        print("analyzing room '%s': %s ..." % (room_name, ", ".join(Path(m["path"]).name for m in members)))
         t0 = time.time()
         try:
-            code, sp, s = analyze.analyze(f, room, manifest, labels, quiet=True)
-        except Exception as e:      # one bad file must not stop the others; it is retried next time
-            lines.append("%s: FAILED - %s: %s" % (room, type(e).__name__, e))
-            state["files"].pop(f.name, None)
+            results, _, out_root = analyze.process_folder(inbox, labels, manifest, stop_on_fail=stop_on_fail, quiet=False, plan=plan, only_rooms=[room_name], out_root=RUNS / time.strftime("%Y%m%d-%H%M%S-run"), cache=cache)
+        except Exception as e:
+            failed.append("%s: FAILED - %s: %s" % (room_name, type(e).__name__, e))
             continue
-        state["files"][f.name] = {**sig, "room": room, "run_folder": str(sp.parent), "exit_code": code, "problems": s["problems"], "seconds": round(time.time() - t0, 1),
-                                  "done_at": time.strftime("%Y-%m-%d %H:%M:%S")}
-        done.append(f.name)
-        save_json(inbox / STATE, state)           # saved after every file so an interrupted run keeps its progress
+        r = results[0]
+        if r.get("data") is None:
+            failed.append("%s: FAILED - %s" % (room_name, r.get("error")))
+            continue
+        state["rooms"][room_name] = {"sig": sig, "run_folder": str(Path(r["summary"]).parent), "exit_code": r["code"], "problems": r["data"]["problems"],
+                                     "seconds": round(time.time() - t0, 1), "done_at": time.strftime("%Y-%m-%d %H:%M:%S")}
+        done.append(room_name)
+        save_json(inbox / STATE, state)
+        if stop_on_fail and r["code"] != 0:
+            print("stopping at the first failure (--stop-on-fail)")
+            break
     save_json(inbox / STATE, state)
-    # mirror the newest result of every room in the inbox into latest\
+    # mirror the newest result of every room into latest\
     latest.mkdir(parents=True, exist_ok=True)
-    results, used = [], set()
-    for f in files:
-        ent = state["files"].get(f.name)
+    results, lines = [], []
+    for room_name in plan["rooms"]:
+        ent = state["rooms"].get(room_name)
         if not ent:
             continue
         rf = Path(ent["run_folder"])
@@ -84,23 +104,22 @@ def run(inbox=None, force: bool = False, latest=None, manifest=None, labels=None
             data = json.loads((rf / "summary.json").read_text(encoding="utf-8"))
         except Exception:
             continue
-        room = ent["room"]
-        tag = analyze.slug(room)
-        if tag in used:
-            tag = analyze.slug(Path(f.name).stem)
-        used.add(tag)
+        tag = analyze.slug(room_name)
         for src_name, dst in (("summary.md", "%s_summary.md" % tag), ("mixcurve.png", "%s_mixcurve.png" % tag)):
             if (rf / src_name).exists():
                 shutil.copy2(rf / src_name, latest / dst)
-        m100 = sorted(rf.glob("step1*/room.png"))
-        if m100:
-            shutil.copy2(m100[0], latest / ("%s_room.png" % tag))
-        results.append({"file": f.name, "room": room, "code": ent["exit_code"], "summary": str(rf / "summary.md"), "data": data})
-        lines.append(_status_line(room, data) + ("  (not re-run: unchanged)" if f.name in skipped else ""))
-    bad = analyze.all_rooms_report(results, latest / "all_rooms_summary.md", "Inbox: %s" % inbox)
+        steps = sorted(rf.glob("step*_mix*"), key=lambda p: -int(p.name.split("mix")[-1]) if p.name.split("mix")[-1].isdigit() else 0)
+        top = [s for s in steps if (s / "room.png").exists()]
+        if top:
+            shutil.copy2(top[0] / "room.png", latest / ("%s_room.png" % tag))
+        for t in sorted((rf / "trace").glob("*/trace.txt")) if (rf / "trace").exists() else []:
+            shutil.copy2(t, latest / ("%s_trace.txt" % t.parent.name))
+        results.append({"file": ", ".join(f.get("file", "?") for f in data.get("files", [])), "room": room_name, "code": ent["exit_code"], "summary": str(rf / "summary.md"), "data": data})
+        lines += _room_lines(room_name, data) if room_name not in skipped else [l + ("  (not re-run: unchanged)" if i == 0 else "") for i, l in enumerate(_room_lines(room_name, data))]
+    bad = analyze.all_rooms_report(results, latest / "all_rooms_summary.md", "Inbox: %s" % inbox, plan)
     print()
     print("Results:")
-    for ln in lines:
+    for ln in lines + ["%s" % f for f in failed]:
         print("  " + ln)
     print()
     print("all_rooms_summary: %s" % (latest / "all_rooms_summary.md"))
@@ -110,4 +129,4 @@ def run(inbox=None, force: bool = False, latest=None, manifest=None, labels=None
             os.startfile(str(latest))           # a normal, visible File Explorer window
         except OSError as e:
             print("could not open %s: %s" % (latest, e))
-    return 1 if (bad or any("FAILED" in ln for ln in lines)) else 0
+    return 1 if (bad or failed) else 0

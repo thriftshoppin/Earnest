@@ -66,10 +66,10 @@ def test_dry_step_and_columns(td):
     mp, dp = lite_files(td)
     wet = td / "lite_100-80-60-30-0.wav"
     se.make_export(wet, "lite", MIXES, irs=se.reverb_irs(), dither=True)
-    p, secs = cli(["analyze", wet, "--room", "liteX", "--manifest", mp, "--dry", dp])
+    p, secs = cli(["analyze", wet, "--room", "liteX", "--manifest", mp, "--probe", dp])
     m = re.search(r"summary: (.*summary\.md)", p.stdout)
     ok_run = p.returncode == 0 and m is not None
-    check("CLI: analyze --manifest <lite manifest> --dry <lite dry wav> runs and exits 0", ok_run, "exit %d, %.0f s; stdout %s; stderr %s" % (p.returncode, secs, p.stdout.strip()[-160:], p.stderr[-200:].strip()))
+    check("CLI: analyze --manifest <lite manifest> --probe <lite probe wav> runs and exits 0", ok_run, "exit %d, %.0f s; stdout %s; stderr %s" % (p.returncode, secs, p.stdout.strip()[-160:], p.stderr[-200:].strip()))
     if not ok_run:
         return None
     sm = Path(m.group(1))
@@ -102,7 +102,7 @@ def test_dry_step_and_columns(td):
 def test_floor_digital_silence(td, mp, dp):
     wet = td / "lite_nodither.wav"
     se.make_export(wet, "lite", MIXES, irs=se.reverb_irs(rt=0.5, seed=3), dither=False)
-    p, _ = cli(["analyze", wet, "--room", "nodither", "--manifest", mp, "--dry", dp])
+    p, _ = cli(["analyze", wet, "--room", "nodither", "--manifest", mp, "--probe", dp])
     m = re.search(r"summary: (.*summary\.md)", p.stdout)
     sj = json.loads(Path(m.group(1)).with_name("summary.json").read_text(encoding="utf-8")) if m else None
     ok = sj is not None and all(s.get("digital_silence") and s["noise_floor_dbfs"] == -140.0 for s in sj["steps"] if "noise_floor_dbfs" in s)
@@ -149,7 +149,7 @@ def test_run(td, mp):
     have = {f.name for f in latest.iterdir()} if latest.exists() else set()
     st = json.loads((inbox / "processed.json").read_text(encoding="utf-8"))
     check("run: latest\\ has the expected files, the room with a silent pass is flagged EMPTY, exit 1, processed.json has both files",
-          want <= have and "beta: EMPTY" in p.stdout and "alpha: OK" in p.stdout and p.returncode == 1 and set(st["files"]) == {"alpha_100-80-60-30-0.wav", "beta-100-80-60-30-0.wav"},
+          want <= have and "beta: EMPTY" in p.stdout and "alpha: OK" in p.stdout and p.returncode == 1 and set(st["rooms"]) == {"alpha", "beta"},
           "exit %d, %.0f s; missing files %s; lines: %s" % (p.returncode, secs, sorted(want - have), [ln.strip() for ln in p.stdout.splitlines() if ln.strip().startswith(("alpha", "beta"))]))
     p2, secs2 = cli(args)
     check("run again: both files skipped as unchanged, nothing analyzed", p2.stdout.count("skipping") == 2 and "analyzed 0, skipped 2" in p2.stdout and "analyzing" not in p2.stdout,
