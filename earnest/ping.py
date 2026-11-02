@@ -75,14 +75,15 @@ def truth(irs, m):
     return float(np.mean([room.analyze_band(ir, fc)[0]["level_db"] for fc in MID])), room.room_metrics(ir)["drr_db"]
 
 
-def run(quick: bool = False) -> int:
+def run(quick: bool = False, base=None) -> int:
     t0 = time.time()
-    PING_DIR.mkdir(parents=True, exist_ok=True)
-    inbox = PING_DIR / "inbox"
+    pdir = Path(base) if base else PING_DIR
+    pdir.mkdir(parents=True, exist_ok=True)
+    inbox = pdir / "inbox"
     inbox.mkdir(exist_ok=True)
     mode = "lite" if quick else "full"
     clip, man = suite.build(mode)
-    mpath = PING_DIR / "ping_manifest.json"
+    mpath = pdir / "ping_manifest.json"
     mpath.write_text(json.dumps(man), encoding="utf-8")
     irs = reverb_irs()
     wet100, wet60 = crossfade(clip, irs, 1.0), crossfade(clip, irs, 0.6)
@@ -98,7 +99,7 @@ def run(quick: bool = False) -> int:
     write_flac(inbox / "noiseonly.flac", noise)
     print("ping: 6 files written to %s (%s probe); running the real chain ..." % (inbox, mode))
     plan = analyze.plan_folder(inbox)
-    results, plan, out_root = analyze.process_folder(inbox, manifest_path=str(mpath), out_root=PING_DIR / "results", quiet=True, plan=plan)
+    results, plan, out_root = analyze.process_folder(inbox, manifest_path=str(mpath), out_root=pdir / "results", quiet=True, plan=plan)
     by = {r["room"]: r for r in results}
     checks = []
 
@@ -152,8 +153,8 @@ def run(quick: bool = False) -> int:
         L.append("%s  %s  %s" % ("OK  " if c["ok"] else "LOST", c["check"], c["detail"]))
     verdict = ("PING OK: %d checks over %d hops, 0 lost" % (len(checks), n_hops)) if not lost else ("PING FAILED: %d of %d checks lost: %s" % (len(lost), len(checks), "; ".join(c["check"] for c in lost)))
     L += ["", verdict, "seconds: %.0f" % (time.time() - t0)]
-    (PING_DIR / "ping.txt").write_text("\n".join(L) + "\n", encoding="utf-8")
-    save_json(PING_DIR / "ping.json", {"verdict": verdict, "checks": checks, "mode": mode, "seconds": round(time.time() - t0, 1)})
+    (pdir / "ping.txt").write_text("\n".join(L) + "\n", encoding="utf-8")
+    save_json(pdir / "ping.json", {"verdict": verdict, "checks": checks, "mode": mode, "seconds": round(time.time() - t0, 1)})
     print("\n".join(L[2:]))
-    print("details: %s" % (PING_DIR / "ping.txt"))
+    print("details: %s" % (pdir / "ping.txt"))
     return 0 if not lost else 1

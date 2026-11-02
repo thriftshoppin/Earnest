@@ -104,6 +104,11 @@ def cmd_run(a):
     return run.run(a.inbox, a.force, a.latest, a.manifest, _labels(a), not a.no_open, a.stop_on_fail)
 
 
+def cmd_reset(a):
+    from . import reset
+    return reset.run(a.yes, a.purge_archive, a.root, a.no_ping)
+
+
 def cmd_ping(a):
     from . import ping
     return ping.run(a.quick)
@@ -182,6 +187,12 @@ def main(argv=None):
     aa.add_argument("--labels")
     aa.add_argument("--stop-on-fail", action="store_true", help="abort the whole batch at the first failure")
     aa.set_defaults(fn=cmd_analyze_all)
+    rs = sub.add_parser("reset", help="archive the runs folder and processed.json (nothing is deleted), check dependencies, run ping")
+    rs.add_argument("--yes", action="store_true", help="do not wait for a keypress")
+    rs.add_argument("--purge-archive", type=float, metavar="DAYS", help="send archive folders older than DAYS days to the Recycle Bin")
+    rs.add_argument("--root", help=argparse.SUPPRESS)
+    rs.add_argument("--no-ping", action="store_true", help=argparse.SUPPRESS)
+    rs.set_defaults(fn=cmd_reset)
     pg = sub.add_parser("ping", help="self-test: pushes known files (clean, effect, channel lost, noise only, 16-bit) through the real chain and checks every hop")
     pg.add_argument("--quick", action="store_true", help="use the short lite probe")
     pg.set_defaults(fn=cmd_ping)

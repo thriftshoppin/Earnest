@@ -3,13 +3,27 @@
 Turns stereo audio into things Claude can read: a **scene sheet** (`listen`), a **room card** with a fitted **reverb formula** (`room`), and a statistical
 re-render check (`resynth`). It never plays audio and contains no output-device code. Signals are written as WAV files and bounced offline in a DAW.
 
-**Quick start: put the exports in `inbox\`, double-click `earnest.bat`.** It analyzes every new or changed file, copies the newest results to `runs\latest\` and opens that folder.
-(`py -3.14 -m earnest run [--force]` does the same from a terminal; `inbox\processed.json` remembers what was done; your files are never moved or deleted.)
+**Quick start: put the exports in `inbox\`, double-click `earnest.bat`.** It analyzes every new or changed file, copies the newest results (and each file's trace) to `runs\latest\` and opens that folder.
+(`py -3.14 -m earnest run [--force] [--stop-on-fail]` does the same from a terminal; `inbox\processed.json` remembers what was done; your files are never moved or deleted.)
+**File names:** one pass per file is the normal case. `<room><digits>.flac` is room `<room>` at Mix `<digits>` (`union100.flac` = room "union", Mix 100); a file whose name starts with `dry` is the dry reference
+(the probe exported without the effect; one dry file serves every room in the inbox and becomes the Mix 0 step). A file that holds several passes (about 5 x 190 s) is one room, labelled by `--labels`.
+Which kind a file is gets decided by its length, not its name. Identical files are flagged DUPLICATE and skipped. `reset.bat` archives old results and runs `earnest ping`.
 
 ## How to run (three lines)
 1. Put the Cakewalk export (one file per room) in a folder.
 2. `py -3.14 -m earnest analyze-all <folder>` (one room: `py -3.14 -m earnest analyze <file> --room "Atrium"`).
 3. Read `all_rooms_summary.md` (and each room's `summary.md`) in the `runs\...-analyze-...` folder it prints. Nothing plays audio.
+
+## Telemetry (trace) and ping
+Every command that reads audio (`analyze`, `run`, `analyze-all`, `split`) prints a trace at the end: one line per hop, `OK`, `WARN` or `FAIL`, with what the hop received against what it expected:
+FILE (container, rate, channels, bit depth, length), READ (per channel: frames, peak, RMS, DC, clipped samples, noise floor, L/R correlation), CONVERT (resampling: frames and per-channel peaks in and out),
+MATCH (each channel against each sweep of the probe: peak-to-noise in dB and where it was found; the detection threshold is the largest value Gaussian noise would reach over all lags, plus 25 %; the sweep's
+processing gain is used, so a probe below the file's bit step can still be found and the trace says how far below), SPLIT (copies found), LEVEL (calibration gain G, usable range), ROOM (direct matrix, IR energy, tail, taps), WRITE.
+The first FAIL stops that file (with the likely cause) and the batch goes on to the next file; `--stop-on-fail` stops the whole batch. A hop over 10 minutes is a FAIL ("stuck at hop X"); Ctrl+C prints the trace so far.
+`trace.txt` and `trace.json` are saved per file (in `runs\...	race\`, mirrored to `runs\latest\`), and every hop is appended to `data	race_log.csv`. A failed hop never blanks the summary: what was read stays in it.
+`py -3.14 -m earnest ping` writes known files (clean probe as 24-bit FLAC with dither, the same through a crossfade effect twice, a 16-bit 44.1 kHz copy, a right-channel-muted copy, noise only), runs the real chain and
+checks every hop against the known truth; about 100 s, output in `runs\ping\`. `reset.bat [--yes] [--purge-archive DAYS]` moves `runs\*` and `processed.json` into `archive\<time>\` (nothing deleted; old archives go to
+the Recycle Bin only with --purge-archive), checks the Python packages and runs ping; it ends with READY or the failing hops.
 
 ## Exporting a room (what to do in Cakewalk)
 - Import the probe once (`gen --suite full` writes it; the user's version is `probe\earnest_probe_v1.flac`, 190.5 s, with its `.json`). Put one Univerb track per Mix level, with the Mix knob **fixed** (no automation) at 100, 80, 60, 30 and 0 **in that order**, the room set to the one you are measuring.
