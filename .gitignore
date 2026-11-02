@@ -7,3 +7,4 @@ data/trace_log.csv
 tests/last_*_console.txt
 tests/all_done.flag
 *.log
+HANDOFF.md
