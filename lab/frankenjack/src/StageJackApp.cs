@@ -95,7 +95,8 @@ sealed class MainWindow : Form {
         }
         advancedMix.Click += delegate {
             if (advancedWindow == null || advancedWindow.IsDisposed) {
-                advancedWindow = new AdvancedMix(key => sliders[key].Value, (key, value) => sliders[key].Value = value);
+                advancedWindow = new AdvancedMix(key => sliders[key].Value, (key, value) => sliders[key].Value = value, null,
+                    () => engine.RoomPath, path => { engine.SelectRoom(path); saveTimer.Stop(); saveTimer.Start(); });
                 advancedWindow.Show(this);
             } else advancedWindow.BringToFront();
         };
@@ -319,7 +320,7 @@ sealed class MainWindow : Form {
     void Poll() {
         string err = engine.Error;
         if (engine.Running) {
-            SetStatus(engine.Building ? "●  BUILDING EARNEST ROOM" : engine.Dsp.Bypass ? "●  RETURN MUTED" : "●  EARNEST RETURN RUNNING / EXPERIMENTAL", accent); startBtn.Text = "STOP";
+            SetStatus(err != null ? "●  ROOM CHANGE FAILED; PREVIOUS BRIDGE RUNNING: " + err : engine.Building ? "●  BUILDING EARNEST ROOM" : engine.Dsp.Bypass ? "●  RETURN MUTED" : "●  EARNEST RETURN RUNNING / EXPERIMENTAL", err != null ? Color.OrangeRed : accent); startBtn.Text = "STOP";
             if ((DateTime.UtcNow - lastStart).TotalSeconds > 10) autoFails = 0;
         }
         else if (waiting) {
@@ -349,6 +350,7 @@ sealed class MainWindow : Form {
                 else if (k == "StageEnabled") stageEnabled = v != "0";
                 else if (k == "SpaceEnabled") spaceEnabled = v != "0";
                 else if (k == "EqEnabled") eqEnabled = v != "0";
+                else if (k == "Room" && File.Exists(v)) engine.SelectRoom(v);
                 else if (k == "Space") { int si; if (int.TryParse(v, out si) && si >= 0 && si < spaceBox.Items.Count) spaceBox.SelectedIndex = si; }
                 else if (sliders.ContainsKey(k)) { int n; if (int.TryParse(v, out n)) sliders[k].Value = n; }
             }
@@ -362,6 +364,7 @@ sealed class MainWindow : Form {
             if ((wantIn ?? SelName(inBox)) != null) lines.Add("Input=" + (wantIn ?? SelName(inBox)));
             if ((wantOut ?? SelName(outBox)) != null) lines.Add("Output=" + (wantOut ?? SelName(outBox)));
             lines.Add("Analysis=" + (wantAnalysis ?? "default"));
+            lines.Add("Room=" + engine.RoomPath);
             lines.Add("Advanced=" + (advChk.Checked ? "1" : "0"));
             lines.Add("StageEnabled=" + (stageEnabled ? "1" : "0"));
             lines.Add("SpaceEnabled=" + (spaceEnabled ? "1" : "0"));

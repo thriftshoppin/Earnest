@@ -22,7 +22,9 @@ internal static class FrankenjackControlTests {
         Func<string,int> read = key => key=="Reverb size"?100:key=="Decay"?100:key=="Reverb"?100:0;
         Action<string,int> write = (key,value) => values[key]=value;
         try {
-            using(var panel=new AdvancedMix(read,write,path)) {
+            using(var panel=new AdvancedMix(read,write,path,()=>"chosen.room.json",room=>{})) {
+                Check(panel.Controls.Find("ChooseRoom",false).Length==1,"room selection is available");
+                Check(panel.Controls.Find("SelectedRoom",false)[0].Text.Contains("chosen.room.json"),"selected room is displayed");
                 Check(File.ReadAllText(path)=="0,0,100,10","safe initial mix state");
                 Move(Find(panel,"DIRECT / DRY"),35);
                 Move(Find(panel,"CENTER REINFORCEMENT"),20);

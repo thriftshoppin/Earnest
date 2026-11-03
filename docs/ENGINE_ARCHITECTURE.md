@@ -61,6 +61,8 @@ The first host registers these components:
 
 The room solver and renderer are currently shoebox/offline components. `earnest detect` reads supported Earnest JSON schemas and common audio headers; `room-solve-from-analysis` composes input detection, acoustic inference, RT60-to-absorption fitting, and the forward solve. The fit adjusts equivalent per-band absorption scales while holding supplied geometry, materials, sources and receivers fixed. It does not solve a unique physical room from audio alone or yet fit early reflections, scattering and spatial metrics into geometry. StageJack is not yet a component; its future integration should consume the shared room solution/render stream and expose its controls as parameters to those components, rather than copy room equations into StageJack.
 
+The intended workspace architecture has Earnest as the shared engine, Frankenjack as one control surface and Studio as a wider workspace that may connect to external tools such as local Applio installations through their supported interfaces. These connections and a common live plugin protocol are future work. The current Frankenjack adapter compiles a selected room and restarts its bridge for room-shape changes; it is not a seamless shared real-time graph. Some live mixing and EQ are implemented in its native host.
+
 ## Workflow examples
 
 The CLI assembles workflows from the same registered components:

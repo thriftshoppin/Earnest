@@ -37,7 +37,7 @@ public sealed class EarnestControls {
 }
 public sealed class EarnestEngine {
     readonly object gate = new object(); readonly System.Threading.Timer timer;
-    readonly string root, room, profile, host, gainFile, eqFile, widthFile; Process bridge; bool active, building; int generation;
+    readonly string root, profile, host, gainFile, eqFile, widthFile; string room; Process bridge; bool active, building; int generation;
     int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100, width=50; bool bypass; string input, output, error;
     readonly float[] wetEq = new float[7];
     public readonly EarnestControls Dsp;
@@ -55,6 +55,13 @@ public sealed class EarnestEngine {
     public bool Running { get { lock(gate) return active && (building || (bridge != null && !bridge.HasExited)); } }
     public bool Building { get { lock(gate) return building; } }
     public string Error { get { lock(gate) return error; } }
+    public string RoomPath { get { lock(gate) return room; } }
+    public void SelectRoom(string path) {
+        string selected=Path.GetFullPath(path);
+        if (!File.Exists(selected)) throw new FileNotFoundException("Room file not found", selected);
+        lock(gate) { room=selected; error=null; }
+        Schedule();
+    }
     public void Start(int inId,int outId,string ignored) {
         var rows=Mme.Outputs();
         if (inId<0 || inId>=rows.Count || outId<0 || outId>=rows.Count) { lock(gate) error="Endpoint is unavailable; rescan"; return; }
@@ -94,13 +101,13 @@ public sealed class EarnestEngine {
     public void Schedule() { lock(gate) { if(!active) return; generation++; timer.Change(900,Timeout.Infinite); } }
     static string Q(string s) { return "\"" + s.Replace("\"", "") + "\""; }
     void Build() {
-        int id,w,t,a,s,d,dec; string source,dest;
-        lock(gate) { if(!active || building) { if(active) timer.Change(1000,Timeout.Infinite); return; } building=true; id=generation; w=100; t=tail; a=absorption; s=scatter; d=diffusion; dec=decay; source=input; dest=output; }
+        int id,w,t,a,s,d,dec; string source,dest,roomFile;
+        lock(gate) { if(!active || building) { if(active) timer.Change(1000,Timeout.Infinite); return; } building=true; id=generation; w=100; t=tail; a=absorption; s=scatter; d=diffusion; dec=decay; source=input; dest=output; roomFile=room; }
         string temp=Path.Combine(Path.GetDirectoryName(profile),"room-"+id+".erir");
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(profile));
-            if(!File.Exists(room) || !File.Exists(host)) throw new Exception("Earnest room or audio host not found in " + root);
-            var psi=new ProcessStartInfo("python", "-u -m earnest.audio.stagejack "+Q(room)+" "+Q(temp)+" --wet "+w+" --tail "+t+" --decay "+dec+" --absorption "+a+" --scattering "+s+" --diffusion "+d);
+            if(!File.Exists(roomFile) || !File.Exists(host)) throw new Exception("Earnest room or audio host not found in " + root);
+            var psi=new ProcessStartInfo("python", "-u -m earnest.audio.stagejack "+Q(roomFile)+" "+Q(temp)+" --wet "+w+" --tail "+t+" --decay "+dec+" --absorption "+a+" --scattering "+s+" --diffusion "+d);
             psi.WorkingDirectory=root; psi.UseShellExecute=false; psi.CreateNoWindow=true; psi.RedirectStandardOutput=true; psi.RedirectStandardError=true;
             using(var p=Process.Start(psi)) { string stdout=p.StandardOutput.ReadToEnd(); string stderr=p.StandardError.ReadToEnd(); p.WaitForExit(); if(p.ExitCode!=0) throw new Exception("Room compilation failed: " + stderr + stdout); }
             lock(gate) {
@@ -111,7 +118,7 @@ public sealed class EarnestEngine {
                 run.WorkingDirectory=Path.GetDirectoryName(host); run.UseShellExecute=false; run.CreateNoWindow=false;
                 bridge=Process.Start(run); error=null;
             }
-        } catch(Exception ex) { lock(gate) { error=ex.Message; active=false; } }
+        } catch(Exception ex) { lock(gate) { if(active && id==generation) { error=ex.Message; active=bridge!=null && !bridge.HasExited; } } }
         finally { lock(gate) { building=false; if(active && id!=generation) timer.Change(900,Timeout.Infinite); } }
     }
     public void Stop() { lock(gate) { active=false; generation++; timer.Change(Timeout.Infinite,Timeout.Infinite); if(bridge!=null && !bridge.HasExited) { bridge.Kill(); bridge.WaitForExit(); } bridge=null; } }

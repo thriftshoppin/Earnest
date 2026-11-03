@@ -14,7 +14,7 @@ public sealed class AdvancedMix : Form {
     readonly Label[] directValues = new Label[7];
     readonly Dictionary<string, TrackBar> engineBars = new Dictionary<string, TrackBar>();
     readonly Dictionary<string, Label> engineValues = new Dictionary<string, Label>();
-    public AdvancedMix(Func<string,int> readControl, Action<string,int> setControl, string controlPath = null) {
+    public AdvancedMix(Func<string,int> readControl, Action<string,int> setControl, string controlPath = null, Func<string> getRoom = null, Action<string> setRoom = null) {
         path = controlPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Earnest", "stagejack", "advanced-mix.txt");
         directEqPath = controlPath == null ? Path.Combine(Path.GetDirectoryName(path), "direct-eq.txt") : controlPath + ".directeq";
         Text = "Earnest | Advanced mix and room controls"; Width = 570; Height = 720; FormBorderStyle = FormBorderStyle.Sizable; AutoScroll = true;
@@ -34,6 +34,20 @@ public sealed class AdvancedMix : Form {
         }
         string[] freq = { "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz" };
         for(int i=0;i<freq.Length;i++) { AddDirectEqRow(freq[i], i, y); y += 70; }
+        if (getRoom != null && setRoom != null) {
+            var roomLabel = new Label { Name="SelectedRoom", Left=18, Top=y, Width=490, Height=42, Text="ROOM: " + getRoom() };
+            Controls.Add(roomLabel); y += 46;
+            var choose = new Button { Name="ChooseRoom", Text="CHOOSE ROOM JSON", Left=18, Top=y, Width=200, Height=30 };
+            choose.Click += delegate {
+                using (var dialog = new OpenFileDialog { Filter="Room JSON (*.json)|*.json|All files (*.*)|*.*", FileName=getRoom(), CheckFileExists=true }) {
+                    if (dialog.ShowDialog(this) == DialogResult.OK) {
+                        try { setRoom(dialog.FileName); roomLabel.Text="ROOM: " + getRoom(); }
+                        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Unable to select room"); }
+                    }
+                }
+            };
+            Controls.Add(choose); y += 40;
+        }
         AutoScrollMinSize = new Size(0, y + 15);
         LoadSaved(); LoadDirectEq(); Write();
     }
