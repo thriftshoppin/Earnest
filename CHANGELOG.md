@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added offline `focus-band` frequency isolation and `audio-compare` residual analysis, exposed as engine components for agent-driven investigation. Tests cover filter selectivity, aligned subtraction, per-band Parseval energy and validation. These are not instrument separation or MIDI transcription.
+
+## Local build 4aaa619 — 2026-11-03
+
 - Restored the original StageJack selectable playback-loopback analyzer in Frankenjack and corrected the graph to show Earnest's seven reflection EQ filters. Offline checks cover sample decoding, missing input and the curve; live monitor behavior still needs verification.
 - Added a suite updater design covering staged installation, compatibility, user data and rollback; it is not implemented.
 

@@ -111,6 +111,41 @@ class SoundFieldSpectrumComponent:
                  source=context.inputs["soundfield.input"].source, notes=tuple(result["limits"]))}
 
 
+class BandFocusComponent:
+    name = "audio.focus_band"
+    requires = ("audio.samples",)
+    provides = ("audio.focused",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .band_focus import focus_band
+        audio = context.inputs["audio.samples"].value
+        try:
+            result = focus_band(audio["samples"], audio["sample_rate_hz"], context.options["low_hz"], context.options["high_hz"])
+        except (TypeError, KeyError, ValueError) as exc:
+            raise EngineError("audio.focus_band: %s" % exc) from exc
+        return {"audio.focused": Artifact("earnest.audio-samples.v1", {"samples": result, "sample_rate_hz": audio["sample_rate_hz"]},
+                source=context.inputs["audio.samples"].source, notes=("Frequency focus is not instrument separation; forward/backward filtering has edge effects.",))}
+
+
+class AudioComparisonComponent:
+    name = "audio.compare"
+    requires = ("audio.reference", "audio.candidate")
+    provides = ("audio.comparison", "audio.residual")
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .comparison import compare_audio
+        ref, candidate = context.inputs["audio.reference"].value, context.inputs["audio.candidate"].value
+        try:
+            if ref["sample_rate_hz"] != candidate["sample_rate_hz"]:
+                raise ValueError("sample rates differ; resample and align explicitly")
+            rate = ref["sample_rate_hz"]
+            result, residual = compare_audio(ref["samples"], candidate["samples"], rate)
+        except (TypeError, KeyError, ValueError) as exc:
+            raise EngineError("audio.compare: %s" % exc) from exc
+        return {"audio.comparison": Artifact(result["schema"], result, notes=tuple(result["limits"])),
+                "audio.residual": Artifact("earnest.audio-samples.v1", {"samples": residual, "sample_rate_hz": rate})}
+
+
 class FrequencyTraceComponent:
     name = "audio.frequency_trace"
     requires = ("audio.samples",)
@@ -435,7 +470,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

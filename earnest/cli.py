@@ -425,6 +425,47 @@ def cmd_instrument_identify(a):
     return 0
 
 
+def cmd_focus_band(a):
+    import soundfile as sf
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        samples, rate = sf.read(a.audio, dtype="float64", always_2d=True)
+        run = create_engine().execute(("audio.focus_band",), {
+            "audio.samples": Artifact("earnest.audio-samples.v1", {"samples": samples, "sample_rate_hz": int(rate)}, source=str(Path(a.audio).resolve()))
+        }, {"audio.focus_band": {"low_hz": a.low, "high_hz": a.high}})
+        output = Path(a.out)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("xb") as f:
+            sf.write(f, run.artifacts["audio.focused"].value["samples"], rate, format="WAV", subtype="FLOAT")
+        print("focus-band: wrote " + str(output.resolve()) + " (frequency focus, not isolated instruments)")
+    except (OSError, ValueError, TypeError, EngineError, RuntimeError) as exc:
+        raise SystemExit("focus-band: %s" % exc)
+    return 0
+
+
+def cmd_audio_compare(a):
+    import soundfile as sf
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        reference, ref_rate = sf.read(a.reference, dtype="float64", always_2d=True)
+        candidate, candidate_rate = sf.read(a.candidate, dtype="float64", always_2d=True)
+        result = create_engine().execute(("audio.compare",), {
+            "audio.reference": Artifact("earnest.audio-samples.v1", {"samples": reference, "sample_rate_hz": int(ref_rate)}, source=str(Path(a.reference).resolve())),
+            "audio.candidate": Artifact("earnest.audio-samples.v1", {"samples": candidate, "sample_rate_hz": int(candidate_rate)}, source=str(Path(a.candidate).resolve()))
+        })
+        report = result.artifacts["audio.comparison"].value
+        report["reference_file"], report["candidate_file"] = str(Path(a.reference).resolve()), str(Path(a.candidate).resolve())
+        output = Path(a.out)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("x", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, allow_nan=False)
+            f.write("\n")
+        print("audio-compare: wrote " + str(output.resolve()))
+    except (OSError, ValueError, TypeError, EngineError, RuntimeError) as exc:
+        raise SystemExit("audio-compare: %s" % exc)
+    return 0
+
+
 def cmd_frequency_trace(a):
     import soundfile as sf
     from .engine import Artifact, EngineError, create_engine
@@ -1108,6 +1149,17 @@ def main(argv=None):
     inst_identify.add_argument("audio")
     inst_identify.add_argument("--model", required=True)
     inst_identify.set_defaults(fn=cmd_instrument_identify)
+    focus = sub.add_parser("focus-band", help="write a frequency-focused audio file for investigation")
+    focus.add_argument("audio", help="input recording")
+    focus.add_argument("--low", type=float, required=True, help="low cutoff in Hz")
+    focus.add_argument("--high", type=float, required=True, help="high cutoff in Hz")
+    focus.add_argument("--out", required=True, help="new float WAV")
+    focus.set_defaults(fn=cmd_focus_band)
+    comparison = sub.add_parser("audio-compare", help="compare aligned reference and candidate recordings")
+    comparison.add_argument("reference", help="reference audio")
+    comparison.add_argument("candidate", help="candidate reconstruction")
+    comparison.add_argument("--out", required=True, help="new JSON comparison report")
+    comparison.set_defaults(fn=cmd_audio_compare)
     frequency = sub.add_parser("frequency-trace", help="transcribe time-stamped spectral peaks from an audio file")
     frequency.add_argument("audio")
     frequency.add_argument("--out", help="new JSON output file")

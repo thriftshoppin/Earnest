@@ -53,6 +53,12 @@ Spatial staging, full multichannel speaker layouts, measured source directivity,
 
 ## Frequency trace: measured evidence for later reasoning
 
+### Focus and hypothesis comparison
+
+`earnest focus-band input.wav --low 400 --high 700 --out focus.wav` applies a fourth-order Butterworth band-pass forwards and backwards with second-order sections. The forward/backward operation squares the single-pass magnitude response and removes its phase shift away from boundary effects; the nominal cutoff is therefore approximately -6 dB in the combined result. This is an offline, fixed-band operation, not yet a continuously sweeping live tuner or a source separator. Filters have transition bands and end effects, and overlapping instruments remain together. The engine component is `audio.focus_band`. Output is float WAV and may exceed full scale; no playback or gain adjustment is performed.
+
+`earnest audio-compare reference.wav candidate.wav --out comparison.json` requires equal sample rates, channel counts and frame counts; it does not automatically align or normalize. Its residual is `e[n,c] = reference[n,c] - candidate[n,c]`, with mean-square error `sum(e²)/N`. A one-sided real FFT uses weights 1 at DC and (for even lengths) Nyquist, and 2 elsewhere, divided by `N²`; summed bin powers equal the residual mean square by Parseval's relation. The report partitions those powers into frequency ranges. Zero residual or zero reference power gives a null relative level instead of an infinite dB value. `audio.compare` also exposes residual samples as an artifact, usable by `audio.frequency_trace` or `audio.focus_band` in a later run. Neither a low residual nor a frequency band proves a unique room, source, instrument or MIDI part.
+
 `earnest frequency-trace input.wav --out trace.json` records time-stamped spectral
 peaks independently for each channel. Options include `--window`, `--hop`,
 `--min-hz`, `--max-hz`, `--max-peaks`, `--min-level-dbfs`, and
