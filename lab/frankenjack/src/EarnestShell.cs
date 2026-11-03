@@ -32,12 +32,13 @@ public sealed class EarnestControls {
     public void Set(float reverb,float width,float depth,float height,float level,float size,float tone,float pre,float clarity,float rw,float smooth,float low,float mid,float high,bool advanced,float decay,float[] eq) {
         owner.SetControls((int)reverb, (int)size, (int)tone, (int)clarity, (int)smooth, (int)decay);
         owner.SetReflectionEq(eq);
+        owner.SetWidth((int)width);
     }
 }
 public sealed class EarnestEngine {
     readonly object gate = new object(); readonly System.Threading.Timer timer;
-    readonly string root, room, profile, host, gainFile, eqFile; Process bridge; bool active, building; int generation;
-    int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100; bool bypass; string input, output, error;
+    readonly string root, room, profile, host, gainFile, eqFile, widthFile; Process bridge; bool active, building; int generation;
+    int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100, width=50; bool bypass; string input, output, error;
     readonly float[] wetEq = new float[7];
     public readonly EarnestControls Dsp;
     public EarnestEngine() {
@@ -48,6 +49,7 @@ public sealed class EarnestEngine {
         profile=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Earnest","stagejack","room.erir");
         gainFile=Path.Combine(Path.GetDirectoryName(profile),"wet-gain.txt");
         eqFile=Path.Combine(Path.GetDirectoryName(profile),"reflection-eq.txt");
+        widthFile=Path.Combine(Path.GetDirectoryName(profile),"stage-width.txt");
         Dsp=new EarnestControls(this); timer=new System.Threading.Timer(delegate { Build(); },null,Timeout.Infinite,Timeout.Infinite);
     }
     public bool Running { get { lock(gate) return active && (building || (bridge != null && !bridge.HasExited)); } }
@@ -68,6 +70,13 @@ public sealed class EarnestEngine {
     void WriteGain() {
         Directory.CreateDirectory(Path.GetDirectoryName(gainFile));
         File.WriteAllText(gainFile, ((bypass ? 0f : wet/100f)).ToString("0.000", CultureInfo.InvariantCulture));
+    }
+    public void SetWidth(int value) {
+        lock(gate) { value=Math.Max(0,Math.Min(100,value)); if(width==value)return; width=value; WriteWidth(); }
+    }
+    void WriteWidth() {
+        Directory.CreateDirectory(Path.GetDirectoryName(widthFile));
+        File.WriteAllText(widthFile,(width/50f).ToString("0.000",CultureInfo.InvariantCulture));
     }
     public void SetBypass(bool value) { lock(gate) { bypass=value; WriteGain(); } }
     public void SetReflectionEq(float[] values) {
@@ -97,8 +106,8 @@ public sealed class EarnestEngine {
             lock(gate) {
                 if (!active || id!=generation) return;
                 if (bridge!=null && !bridge.HasExited) { bridge.Kill(); bridge.WaitForExit(); }
-                WriteGain(); WriteEq();
-                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --output-limit 1");
+                WriteGain(); WriteEq(); WriteWidth();
+                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --width-file "+Q(widthFile)+" --output-limit 1");
                 run.WorkingDirectory=Path.GetDirectoryName(host); run.UseShellExecute=false; run.CreateNoWindow=false;
                 bridge=Process.Start(run); error=null;
             }

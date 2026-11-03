@@ -216,3 +216,17 @@ Offline checks verify each band's ±6 dB response at its center, verify direct
 EQ does not alter the wet return, and exercise the UI control file. No live
 device, headset, or listening validation was performed. Deployment requires
 updating both the Frankenjack UI and its native audio host together.
+
+## Stereo width tuning
+
+Frankenjack's Stage Width control now adjusts the stereo sum after direct and
+wet paths are mixed and before the existing hard ceiling. With
+`M=(L+R)/2`, `S=(L-R)/2`, and slider value `p` from 0 to 100, the native
+bridge smooths `w=p/50` and computes `L'=M+wS`, `R'=M-wS`. Thus 0 is mono,
+50 preserves the original stereo, and 100 doubles the side component.
+The control is independent of room parameters and uses a control file read by
+the running bridge. Other channel layouts pass through this stage unchanged.
+This is mid/side stereo processing, not physical source positioning or an
+ears/head model; widening can increase peaks and the current ceiling is a hard
+clamp. Offline tests checked mono, unity, widened, and unchanged default behavior;
+no live listening test has been performed.

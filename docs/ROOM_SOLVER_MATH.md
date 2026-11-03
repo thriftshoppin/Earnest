@@ -370,3 +370,14 @@ additive center signal; the reflected filter precedes wet gain. See the
 [W3C Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/).
 Both cascades start at unity. Smoothing and finite-precision implementation are
 not guarantees against all audible transition artifacts.
+
+
+## Independent stereo-width control
+
+After dry, center and wet summation, the native bridge applies `M=(L+R)/2`,
+`S=(L-R)/2`, `w=p/50`, `L'=M+wS`, `R'=M-wS`, where `p` is the Stage
+Width control from 0 to 100. The default `p=50` leaves the stereo mix
+unchanged; `p=0` produces mono and `p=100` doubles side amplitude. The
+result passes through the existing hard ceiling. This is an algebraic
+mid/side effect; it does not locate a source in a physical room or change
+multichannel speaker geometry. The host smooths changes per sample.

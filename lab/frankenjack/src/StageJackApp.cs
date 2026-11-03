@@ -509,7 +509,7 @@ sealed class MainWindow : Form {
         void DrawSlider(Graphics g, string name, Rectangle r) {
             DrawFrame(g, r, Color.FromArgb(61, 78, 74));
             StageSlider s = app.sliders[name]; int inset = r.Width < 150 ? 8 : 11;
-            bool available = name == "Reverb" || name == "Reverb size" || name == "Reverb tone" || name == "Reverb clarity" || name == "Smoothness";
+            bool available = name == "Stage width" || name == "Reverb" || name == "Reverb size" || name == "Reverb tone" || name == "Reverb clarity" || name == "Smoothness";
             if (!available) { DrawText(g, Clip(SliderLabel(name) + " / NOT WIRED", Math.Max(7, (r.Width - 20) / 7)), app.small, Color.FromArgb(110, 120, 115), r.X + inset, r.Y + 5); return; }
             string unit = "%";
             int labelLimit = Math.Max(7, (r.Width - 65) / 7);
@@ -645,6 +645,7 @@ sealed class MainWindow : Form {
             if (route[2].Contains(p)) { app.Toggle(); Invalidate(); return; }
             if (route[3].Contains(p)) { app.engine.Dsp.Bypass = !app.engine.Dsp.Bypass; app.bypassBtn.Text = app.engine.Dsp.Bypass ? "BYPASS / ON" : "BYPASS / OFF"; Invalidate(); return; }
             if (route[4].Contains(p)) { app.Populate(app.wantIn ?? app.SelName(app.inBox), app.wantOut ?? app.SelName(app.outBox)); app.Resolve(); Invalidate(); return; }
+            if (PowerBounds(0).Contains(p)) { app.ToggleSection(0); return; }
             if (PowerBounds(1).Contains(p)) { app.ToggleSection(1); return; }
             if (SpacePresetBounds.Contains(p)) { Rectangle r = SpacePresetBounds; dropdown = "space"; dropdownOffset = 0; dropRect = new Rectangle(r.X, r.Bottom, r.Width, 30); Invalidate(); return; }
             Rectangle[] bandsNow = BandBounds;
@@ -652,6 +653,7 @@ sealed class MainWindow : Form {
             string hit = FindSlider(p); if (hit != null) { dragging = hit; SetSlider(p.X, hit); Invalidate(); }
         }
         string FindSlider(Point p) {
+            if (SliderBounds("Stage width").Contains(p)) return "Stage width";
             foreach (string name in spaceSliders) if ((name == "Reverb" || name == "Reverb size" || name == "Reverb tone" || name == "Reverb clarity" || name == "Smoothness") && SliderBounds(name).Contains(p)) return name;
             return null;
         }

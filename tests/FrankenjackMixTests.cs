@@ -11,7 +11,7 @@ internal static class FrankenjackMixTests {
             Console.WriteLine("FAIL {0}: {1} vs {2}",name,actual,expected); failures++;
         } else Console.WriteLine("PASS {0}: {1}",name,actual);
     }
-    static float[] Run(float dry,float center,float wet,float master,float ceiling,float left,float right) {
+    static float[] Run(float dry,float center,float wet,float master,float ceiling,float left,float right,float width=1f) {
         const int rate=48000, frames=16000;
         var source=new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(rate,2));
         source.BufferDuration=TimeSpan.FromSeconds(2);
@@ -19,7 +19,7 @@ internal static class FrankenjackMixTests {
         for (int i=0;i<frames;i++) { input[i*2]=left; input[i*2+1]=right; }
         var bytes=new byte[input.Length*4]; Buffer.BlockCopy(input,0,bytes,0,bytes.Length); source.AddSamples(bytes,0,bytes.Length);
         var provider=new ConvolutionProvider(source,profile);
-        provider.TargetDry=dry; provider.TargetCenter=center; provider.TargetGain=wet; provider.TargetMaster=master; provider.TargetCeiling=ceiling;
+        provider.TargetDry=dry; provider.TargetCenter=center; provider.TargetGain=wet; provider.TargetMaster=master; provider.TargetCeiling=ceiling; provider.TargetWidth=width;
         var result=new byte[bytes.Length]; provider.Read(result,0,result.Length);
         var output=new float[input.Length]; Buffer.BlockCopy(result,0,output,0,result.Length);
         return new float[]{output[output.Length-2],output[output.Length-1]};
@@ -65,6 +65,10 @@ internal static class FrankenjackMixTests {
             Near("direct EQ +6 dB at center frequency",(float)(boostedDirect/unityDirect),(float)Math.Pow(10,6.0/20),.03f);
             double unityWet=ToneRms(false,false), isolatedWet=ToneRms(false,true);
             Near("direct EQ leaves wet path alone",(float)(isolatedWet/unityWet),1,.001f);
+            var mono=Run(1,0,0,1,1,.04f,.02f,0);
+            Near("width zero sums to mid left",mono[0],.03f,.0002f); Near("width zero sums to mid right",mono[1],.03f,.0002f);
+            var widened=Run(1,0,0,1,1,.04f,.02f,2);
+            Near("width two doubles side left",widened[0],.05f,.0002f); Near("width two doubles side right",widened[1],.01f,.0002f);
             var direct=Run(1,0,0,1,1,.04f,.02f);
             Near("dry left",direct[0],.04f,.0002f); Near("dry right",direct[1],.02f,.0002f);
             var centered=Run(1,1,0,1,1,.04f,.02f);

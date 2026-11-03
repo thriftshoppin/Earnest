@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Wired the Stage Width control to a smoothed, unity-by-default stereo mid/side stage independent of the room, with offline mono, unity and widened checks. Other spatial positioning controls remain unwired.
+
+## Local build e877184 — 2026-11-03
+
 - Added separate unity-by-default seven-band direct EQ in Frankenjack Advanced Mix and the native bridge, independent of reflection EQ. Offline tests verify ±6 dB at every band center, path isolation, and UI file bindings.
 
 ## Local build 9bb7239 — 2026-11-03

@@ -215,14 +215,14 @@ internal sealed class ConvolutionProvider : IWaveProvider
     readonly Complex[] scratch = new Complex[Size], sum = new Complex[Size];
     readonly float[][] input, output, overlap;
     internal readonly ReflectionEq Eq, DirectEq;
-    readonly float[] directFrame;
+    readonly float[] directFrame, mixedFrame;
     byte[] bytes = new byte[0];
     float[] samples = new float[0];
     int position, ring;
     internal volatile float TargetGain = 1f;
     internal float OutputLimit = 1f;
-    internal volatile float TargetDry = 0f, TargetCenter = 0f, TargetMaster = 1f, TargetCeiling = 0.1f;
-    float currentDry = 0f, currentCenter = 0f, currentMaster = 1f, currentCeiling = 0.1f;
+    internal volatile float TargetDry = 0f, TargetCenter = 0f, TargetMaster = 1f, TargetCeiling = 0.1f, TargetWidth = 1f;
+    float currentDry = 0f, currentCenter = 0f, currentMaster = 1f, currentCeiling = 0.1f, currentWidth = 1f;
     readonly float[][] directDelay;
     int directPos;
     float currentGain = 1f;
@@ -241,6 +241,7 @@ internal sealed class ConvolutionProvider : IWaveProvider
             Eq = new ReflectionEq(channels, rate);
             DirectEq = new ReflectionEq(channels, rate);
             directFrame = new float[channels];
+            mixedFrame = new float[channels];
             // Align the direct signal with the 85 ms lookahead and convolution block.
             int delayFrames = (int)Math.Round(rate * 0.085) + Block;
             directDelay = new float[channels][];
@@ -304,6 +305,7 @@ internal sealed class ConvolutionProvider : IWaveProvider
             currentCenter += 0.002f * (TargetCenter - currentCenter);
             currentMaster += 0.002f * (TargetMaster - currentMaster);
             currentCeiling += 0.002f * (TargetCeiling - currentCeiling);
+            currentWidth += 0.002f * (TargetWidth - currentWidth);
             // Center is an additive, equally distributed mid signal; side is preserved.
             for (int c = 0; c < channels; c++) directFrame[c] = DirectEq.Process(c, directDelay[c][directPos]);
             float mid = channels == 2 ? 0.5f * (directFrame[0] + directFrame[1]) : 0f;
@@ -313,10 +315,16 @@ internal sealed class ConvolutionProvider : IWaveProvider
                 input[c][position] = incoming;
                 float direct = directFrame[c];
                 directDelay[c][directPos] = incoming;
-                float value = (Eq.Process(c, output[c][position]) * currentGain + direct * currentDry + mid * currentCenter) * currentMaster;
-                float limit = Math.Min(OutputLimit, currentCeiling);
-                samples[frame + c] = Math.Max(-limit, Math.Min(limit, value));
+                mixedFrame[c] = (Eq.Process(c, output[c][position]) * currentGain + direct * currentDry + mid * currentCenter) * currentMaster;
             }
+            // Only stereo has a defined mid/side mapping; preserve other channel layouts.
+            if (channels == 2) {
+                float stageMid = .5f * (mixedFrame[0] + mixedFrame[1]);
+                float stageSide = .5f * (mixedFrame[0] - mixedFrame[1]) * currentWidth;
+                mixedFrame[0] = stageMid + stageSide; mixedFrame[1] = stageMid - stageSide;
+            }
+            float limit = Math.Min(OutputLimit, currentCeiling);
+            for (int c = 0; c < channels; c++) samples[frame+c] = Math.Max(-limit, Math.Min(limit, mixedFrame[c]));
             if (++directPos == directDelay[0].Length) directPos = 0;
             if (++position == Block) { position = 0; ProcessBlock(); }
         }
@@ -445,6 +453,7 @@ internal static class Program
                         string mixFile = Argument(args, "--mix-file");
                         string wetEqFile = Argument(args, "--wet-eq-file");
                         string directEqFile = Argument(args, "--direct-eq-file");
+                        string widthFile = Argument(args, "--width-file");
                         string limitArg = Argument(args, "--output-limit");
                         if (limitArg != null) {
                             float limit;
@@ -484,6 +493,11 @@ internal static class Program
                                     }
                                     if(valid) convolver.Eq.Target=values;
                                 }
+                            } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                            if (widthFile != null) try {
+                                float width;
+                                if (Single.TryParse(File.ReadAllText(widthFile).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out width) && !Single.IsNaN(width) && !Single.IsInfinity(width))
+                                    convolver.TargetWidth = Math.Max(0f, Math.Min(2f, width));
                             } catch (IOException) { } catch (UnauthorizedAccessException) { }
                             if (directEqFile != null) try {
                                 string[] entries=File.ReadAllText(directEqFile).Trim().Split(',');
