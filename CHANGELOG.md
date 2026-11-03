@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added independent, common in-phase and opposite-polarity source assumptions to the room-field viewer, plus validated custom complex correlation matrices in the engine/CLI. Exact cancellation and missing near-source values are represented separately when a nonzero reference exists.
+
+## Local build 6ce0354 — 2026-11-03
+
 - Added an interactive, relative, single-frequency room-field slice and CLI export using coherent image paths within each source and independent powers across sources. The map is a limited point-sampled preview, not a measured SPL or late-field simulation.
 
 ## Local build c773cd3 — 2026-11-03

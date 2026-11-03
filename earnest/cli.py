@@ -270,10 +270,12 @@ def cmd_room_field(a):
     try:
         path = Path(a.room_file)
         document = json.loads(path.read_text(encoding="utf-8-sig"))
+        matrix = json.loads(Path(a.correlation_matrix).read_text(encoding="utf-8-sig")) if a.correlation_matrix else None
         run = create_engine().execute(("room.parse", "room.field_slice"),
             {"room.document": Artifact("earnest.room.v1", document, source=str(path.resolve()))},
             {"room.field_slice": {"frequency_hz": a.frequency, "grid_size": a.grid,
-                                  "height_m": a.height, "reflection_order": a.order}})
+                                  "height_m": a.height, "reflection_order": a.order,
+                                  "correlation_mode": a.correlation, "source_correlation": matrix}})
         result = run.artifacts["room.field_slice"].value
         if a.out:
             target = Path(a.out)
@@ -1036,6 +1038,8 @@ def main(argv=None):
     field_slice.add_argument("--grid", type=int, default=13)
     field_slice.add_argument("--height", type=float)
     field_slice.add_argument("--order", type=int, default=1)
+    field_slice.add_argument("--correlation", choices=("independent", "in_phase", "opposed"), default="independent")
+    field_slice.add_argument("--correlation-matrix", help="JSON array of source correlation entries [real, imaginary]")
     field_slice.add_argument("--out", help="new JSON output file; default stdout")
     field_slice.set_defaults(fn=cmd_room_field)
     field = sub.add_parser("soundfield-spectrum", help="propagate correlated source spectra through transfer matrices")

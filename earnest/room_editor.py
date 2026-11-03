@@ -65,7 +65,9 @@ def create_server(port: int = 8775) -> ThreadingHTTPServer:
                     from .engine.field_grid import sample_room_field
                     result = sample_room_field(room, frequency_hz=field_options.get("frequency_hz", 1000),
                         grid_size=field_options.get("grid_size", 13), height_m=field_options.get("height_m"),
-                        reflection_order=field_options.get("reflection_order", 1))
+                        reflection_order=field_options.get("reflection_order", 1),
+                        correlation_mode=field_options.get("correlation_mode", "independent"),
+                        source_correlation=field_options.get("source_correlation"))
                 if self.path == "/api/instructions":
                     from .room_instructions import make_instructions
                     result = make_instructions(document)

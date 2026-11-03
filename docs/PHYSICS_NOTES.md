@@ -166,7 +166,12 @@ Room Studio's **Map sound field** button uses `room.field_slice`, the same
 component available through `earnest room-field`. Select an octave center and
 height, then map again after editing the room. Colors show relative sampled
 power from -40 dB to the strongest sample; they do not show calibrated SPL.
-The map is calculated from direct and first-order image paths for independent
-sources, with an omnidirectional virtual receiver. It excludes the stochastic
-late tail and source correlations. See the [equation sheet](ROOM_SOLVER_MATH.md)
+The map is calculated from direct and first-order image paths, with an
+omnidirectional virtual receiver. Independent, common in-phase, and opposite
+polarity source assumptions are selectable; a custom complex source-correlation
+matrix is supported in the CLI. It excludes the stochastic late tail. See the [equation sheet](ROOM_SOLVER_MATH.md)
 for the equation and limitations.
+
+## Source correlation in the viewer
+
+The map now offers independent, common in-phase and two-source opposite-polarity assumptions. The CLI additionally accepts a complex correlation matrix in source order. The color scale is normalized separately for each map; it cannot compare absolute loudness between maps. Details and matrix validation are in the [equation sheet](ROOM_SOLVER_MATH.md).

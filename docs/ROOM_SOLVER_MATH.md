@@ -312,10 +312,33 @@ returns grid spacing and values; `earnest room-field room.json --frequency 1000
 plots the same component, using 13 x 13 cells and zero or one reflection order.
 
 The map uses point samples, not an integral or volume density. Reflection paths
-within each source add coherently; different sources are treated as uncorrelated.
+within each source add coherently; the default assumes independent sources, while
+configurable source-correlation modes and matrices are described below.
 The virtual receiver is omnidirectional, source directionality is included, and
 source band levels are used as relative weights. This is a single-frequency
 preview and can undersample rapid interference patterns. The statistical late
 tail, diffraction, source near field, source correlation and absolute SPL
 calibration are excluded. Samples within 0.1 m of a point source are omitted.
 The input reflection order and grid size are capped to keep the viewer responsive.
+
+
+## Correlated sources in field slices (November 2026)
+
+Let `u_i = 10^(L_i,b/20) H_i(r,f)` and define `C_ij=E[X_i conj(X_j)]`
+for unit-power normalized sources. The mapped relative power is
+`P(r,f) = u C u^H`. Independent sources use identity `C`; a common
+in-phase signal uses a matrix of ones; two sources in opposite polarity use
+`[[1,-1],[-1,1]]`. Room Studio exposes those three choices. Its map is
+normalized to its own peak, so colors from two separately generated maps are
+not calibrated against each other.
+
+`earnest room-field room.json --correlation opposed --out field.json` uses the
+two-source polarity preset. `--correlation-matrix path.json` accepts an N-by-N
+matrix in the room source order, with each complex entry `[real, imaginary]`;
+it must be Hermitian, positive semidefinite, and have unit diagonal.
+[An example matrix](../examples/soundfield/opposed-two-source-correlation.json)
+is included. Correlation is an input assumption for the selected frequency; it is
+not estimated from music. Zero power is floored to -300 dB when a nonzero peak
+exists, while excluded near-source points remain `null`. An entirely zero field
+has no normalizing reference and produces `null` levels. The late field and
+calibrated absolute SPL remain excluded.

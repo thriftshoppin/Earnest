@@ -1,6 +1,7 @@
 import copy
 import math
 import cmath
+import numpy as np
 import unittest
 import tempfile
 import json
@@ -54,6 +55,47 @@ class FieldGridTests(unittest.TestCase):
         for a,b in zip(sum(r1['relative_level_db'],[]),sum(r2['relative_level_db'],[])):
             if a is None:self.assertIsNone(b)
             else:self.assertAlmostEqual(a,b,places=10)
+    def test_coherent_sources_interfere_at_equal_distance(self):
+        doc=self.simple();doc['sources'].append({'id':'other','position':[5,3,1]})
+        room=RoomSpec.from_dict(doc)
+        independent=sample_room_field(room,grid_size=3,height_m=1,reflection_order=0)
+        same=sample_room_field(room,grid_size=3,height_m=1,reflection_order=0,correlation_mode='in_phase')
+        opposed=sample_room_field(room,grid_size=3,height_m=1,reflection_order=0,correlation_mode='opposed')
+        self.assertEqual(same['correlation_mode'],'in_phase')
+        self.assertLessEqual(opposed['relative_level_db'][1][1], -250)
+        self.assertLess(same['relative_level_db'][0][0], independent['relative_level_db'][0][0])
+
+    def test_complex_correlation_and_invalid_matrices(self):
+        doc=self.simple();doc['sources'].append({'id':'other','position':[5,3,1]})
+        room=RoomSpec.from_dict(doc)
+        matrix=[[[1,0],[0,1]],[[0,-1],[1,0]]]
+        custom=sample_room_field(room,grid_size=3,height_m=1,reflection_order=0,source_correlation=matrix)
+        self.assertEqual(custom['source_correlation'],matrix)
+        self.assertEqual(custom['correlation_mode'],'custom')
+        source_points=[(1,3,1),(5,3,1)]
+        corr=np.array([[1,1j],[-1j,1]],dtype=complex)
+        raw=[]
+        for j in range(3):
+            row=[]
+            for i in range(3):
+                point=(1+2*i,1+2*j,1)
+                if point in source_points:row.append(None);continue
+                distance=[math.dist(point,source) for source in source_points]
+                h=np.array([cmath.exp(-2j*math.pi*1000*r/room.sound_speed_m_s())/r for r in distance])
+                row.append(max(float(np.real(h @ corr @ h.conj())),0))
+            raw.append(row)
+        peak=max(v for row in raw for v in row if v is not None)
+        for j,row in enumerate(raw):
+            for i,v in enumerate(row):
+                if v and v>1e-12:self.assertAlmostEqual(custom['relative_level_db'][j][i],10*math.log10(v/peak),places=9)
+        for bad in ([[[1,0],[2,0]],[[2,0],[1,0]]], [[[1,0],[0,1]],[[0,1],[1,0]]], [[[0,0],[0,0]],[[0,0],[1,0]]]):
+            with self.subTest(matrix=bad),self.assertRaises(ValueError):
+                sample_room_field(room,grid_size=3,source_correlation=bad)
+        with self.assertRaises(ValueError):
+            sample_room_field(RoomSpec.from_dict(self.simple()),correlation_mode='opposed')
+        with self.assertRaises(ValueError):
+            sample_room_field(room,correlation_mode='in_phase',source_correlation=matrix)
+
     def test_cli_writes_field_without_overwriting(self):
         with tempfile.TemporaryDirectory() as temp:
             room, target = Path(temp)/'room.json', Path(temp)/'field.json'
@@ -65,7 +107,7 @@ class FieldGridTests(unittest.TestCase):
     def test_directionality_and_validation(self):
         d=self.simple();d['sources'][0].update(directivity='cardioid',orientation=[-1,0,0])
         field=sample_room_field(RoomSpec.from_dict(d),grid_size=3,height_m=1,reflection_order=0)
-        self.assertIsNone(field['relative_level_db'][1][1])
+        self.assertLessEqual(field['relative_level_db'][1][1], -250)
         room=RoomSpec.from_dict(self.simple())
         for kwargs in ({'frequency_hz':300},{'grid_size':22},{'height_m':0},{'reflection_order':2}):
             with self.subTest(kwargs=kwargs),self.assertRaises(ValueError):sample_room_field(room,**kwargs)

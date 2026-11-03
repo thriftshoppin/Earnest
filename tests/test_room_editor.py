@@ -74,6 +74,9 @@ class RoomEditorTests(unittest.TestCase):
         self.assertEqual(field['schema'], 'earnest.room-field-slice.v1')
         self.assertEqual(field['grid_size'], 3)
         self.assertEqual(len(field['relative_level_db']), 3)
+        coherent = self.post('/api/field', {'room': room, 'frequency_hz': 1000, 'grid_size': 3,
+                                           'reflection_order': 0, 'correlation_mode': 'opposed'})
+        self.assertEqual(coherent['correlation_mode'], 'opposed')
         with self.assertRaises(urllib.error.HTTPError) as error:
             self.post('/api/field', {'room': room, 'grid_size': 50})
         self.assertEqual(error.exception.code, 400)
