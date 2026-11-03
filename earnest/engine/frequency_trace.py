@@ -9,7 +9,7 @@ from scipy.signal import find_peaks
 def trace_frequencies(audio, sample_rate_hz: int, *, window_size: int = 4096,
                       hop_size: int = 512, min_hz: float = 40.0, max_hz: float | None = None,
                       min_level_dbfs: float = -80.0, relative_threshold_db: float = -45.0,
-                      max_peaks: int = 24) -> dict:
+                      max_peaks: int = 24, pitch_labels: bool = False, a4_hz: float = 440.0) -> dict:
     """Analyze independent channels with Hann-windowed, interpolated FFT peaks.
 
     Peak magnitude is coherent-gain calibrated for an isolated sinusoid. Noise,
@@ -23,6 +23,11 @@ def trace_frequencies(audio, sample_rate_hz: int, *, window_size: int = 4096,
         raise ValueError("hop_size must be an integer between 1 and window_size")
     if isinstance(max_peaks, bool) or not isinstance(max_peaks, int) or not 1 <= max_peaks <= 256:
         raise ValueError("max_peaks must be an integer from 1 to 256")
+    if not isinstance(pitch_labels, bool):
+        raise ValueError("pitch_labels must be boolean")
+    if pitch_labels:
+        from .pitch import frequency_to_pitch
+        frequency_to_pitch(440, a4_hz)  # validate reference even for silence
     maximum = float(sample_rate_hz / 2 if max_hz is None else max_hz)
     minimum = float(min_hz)
     threshold, relative = float(min_level_dbfs), float(relative_threshold_db)
@@ -70,8 +75,10 @@ def trace_frequencies(audio, sample_rate_hz: int, *, window_size: int = 4096,
                     # and interpolation bias in the amplitude estimate.
                     phase = np.exp(-2j * np.pi * hz * np.arange(window_size) / sample_rate_hz)
                     amplitude = 2.0 * abs(np.dot(chunk[:, channel] * window, phase)) / window_sum
-                    peaks.append({"hz": hz,
-                                  "level_dbfs": 20.0 * math.log10(max(float(amplitude), 1e-15))})
+                    peak = {"hz": hz, "level_dbfs": 20.0 * math.log10(max(float(amplitude), 1e-15))}
+                    if pitch_labels and hz > 0:
+                        peak["pitch_coordinate"] = frequency_to_pitch(hz, a4_hz)
+                    peaks.append(peak)
             channels.append({"channel": channel, "peaks": peaks})
         frames.append({"start_s": start / sample_rate_hz,
                        "center_s": (start + valid / 2.0) / sample_rate_hz,

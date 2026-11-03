@@ -1,0 +1,5 @@
+# Optional separate Python 3.11 environment; do not install into Earnest's runtime.
+basic-pitch==0.4.0
+numpy==1.26.4
+scipy==1.15.3
+setuptools==80.10.2

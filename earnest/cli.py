@@ -425,6 +425,32 @@ def cmd_instrument_identify(a):
     return 0
 
 
+def cmd_separate(a):
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        run = create_engine().execute(("audio.separate",),
+            {"audio.file": Artifact("earnest.audio-file.v1", a.audio, source=str(Path(a.audio).resolve()))},
+            {"audio.separate": {"output_dir": a.out, "backend": a.backend, "device": a.device}})
+        result = run.artifacts["audio.separation"].value
+    except (OSError, ValueError, RuntimeError, EngineError) as exc:
+        raise SystemExit("separate: %s" % exc)
+    print("separate: %d estimated stems -> %s" % (len(result["stems"]), Path(a.out).resolve()))
+    return 0
+
+
+def cmd_transcribe(a):
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        run = create_engine().execute(("audio.transcribe",),
+            {"audio.file": Artifact("earnest.audio-file.v1", a.audio, source=str(Path(a.audio).resolve()))},
+            {"audio.transcribe": {"output_dir": a.out, "backend": a.backend}})
+        result = run.artifacts["audio.transcription"].value
+    except (OSError, ValueError, RuntimeError, EngineError) as exc:
+        raise SystemExit("transcribe: %s" % exc)
+    print("transcribe: %d MIDI file(s) -> %s" % (len(result["midi_files"]), Path(a.out).resolve()))
+    return 0
+
+
 def cmd_focus_band(a):
     import soundfile as sf
     from .engine import Artifact, EngineError, create_engine
@@ -443,6 +469,45 @@ def cmd_focus_band(a):
     return 0
 
 
+def cmd_audio_rank(a):
+    """Compare several explicitly supplied reconstructions against one reference."""
+    import hashlib
+    import soundfile as sf
+    from .engine.comparison import compare_audio
+    def sha256_file(path):
+        digest = hashlib.sha256()
+        with path.open("rb") as f:
+            for block in iter(lambda: f.read(1024 * 1024), b""):
+                digest.update(block)
+        return digest.hexdigest()
+    try:
+        reference_path = Path(a.reference)
+        reference, rate = sf.read(str(reference_path), dtype="float64", always_2d=True)
+        rows = []
+        for name in a.candidates:
+            candidate_path = Path(name)
+            candidate, candidate_rate = sf.read(str(candidate_path), dtype="float64", always_2d=True)
+            if candidate_rate != rate:
+                raise ValueError("sample rate differs for %s" % candidate_path)
+            report, _ = compare_audio(reference, candidate, int(rate))
+            mse = sum(channel["residual_mean_square"] for channel in report["channels"]) / len(report["channels"])
+            rows.append({"file": str(candidate_path.resolve()), "sha256": sha256_file(candidate_path),
+                         "mean_square_error": mse, "channels": report["channels"]})
+        rows.sort(key=lambda row: row["mean_square_error"])
+        reference_hash = sha256_file(reference_path)
+        report = {"schema": "earnest.audio-ranking.v1", "reference_file": str(reference_path.resolve()),
+                  "reference_sha256": reference_hash, "sample_rate_hz": int(rate), "candidates": rows,
+                  "limits": ["Ranked by unadjusted time-domain mean-square error; inputs must be aligned.",
+                             "A lower error does not prove correct instrument or room identification."]}
+        output = Path(a.out); output.parent.mkdir(parents=True, exist_ok=True)
+        with output.open("x", encoding="utf-8") as f:
+            json.dump(report, f, indent=2, allow_nan=False); f.write("\n")
+        print("audio-rank: compared %d candidates -> %s" % (len(rows), output.resolve()))
+    except (OSError, ValueError, TypeError, RuntimeError) as exc:
+        raise SystemExit("audio-rank: %s" % exc)
+    return 0
+
+
 def cmd_audio_compare(a):
     import soundfile as sf
     from .engine import Artifact, EngineError, create_engine
@@ -452,7 +517,7 @@ def cmd_audio_compare(a):
         result = create_engine().execute(("audio.compare",), {
             "audio.reference": Artifact("earnest.audio-samples.v1", {"samples": reference, "sample_rate_hz": int(ref_rate)}, source=str(Path(a.reference).resolve())),
             "audio.candidate": Artifact("earnest.audio-samples.v1", {"samples": candidate, "sample_rate_hz": int(candidate_rate)}, source=str(Path(a.candidate).resolve()))
-        })
+        }, {"audio.compare": {"segment_seconds": a.segment_seconds}})
         report = result.artifacts["audio.comparison"].value
         report["reference_file"], report["candidate_file"] = str(Path(a.reference).resolve()), str(Path(a.candidate).resolve())
         output = Path(a.out)
@@ -476,7 +541,8 @@ def cmd_frequency_trace(a):
             {"audio.samples": Artifact("earnest.audio-samples.v1", {"samples": samples, "sample_rate_hz": int(fs)}, source=str(path.resolve()))},
             {"audio.frequency_trace": {"window_size": a.window, "hop_size": a.hop,
                                        "min_hz": a.min_hz, "max_hz": a.max_hz, "max_peaks": a.max_peaks,
-                                       "min_level_dbfs": a.min_level_dbfs, "relative_threshold_db": a.relative_threshold_db}})
+                                       "min_level_dbfs": a.min_level_dbfs, "relative_threshold_db": a.relative_threshold_db,
+                                       "pitch_labels": a.pitch_labels, "a4_hz": a.a4_hz}})
         result = run.artifacts["audio.frequency_trace"].value
         result["source_file"] = str(path.resolve())
         out = Path(a.out) if a.out else new_run("frequency-trace") / "frequency-trace.json"
@@ -1149,16 +1215,33 @@ def main(argv=None):
     inst_identify.add_argument("audio")
     inst_identify.add_argument("--model", required=True)
     inst_identify.set_defaults(fn=cmd_instrument_identify)
+    separate = sub.add_parser("separate", help="estimate four stems using an optional Demucs backend")
+    separate.add_argument("audio", help="input recording")
+    separate.add_argument("--out", required=True, help="new output directory")
+    separate.add_argument("--backend", help="path to the Demucs executable")
+    separate.add_argument("--device", choices=("cpu", "cuda"), default="cpu", help="inference device (default cpu)")
+    separate.set_defaults(fn=cmd_separate)
+    transcribe = sub.add_parser("transcribe", help="estimate MIDI notes using an optional Basic Pitch backend")
+    transcribe.add_argument("audio", help="input recording, ideally a single instrument")
+    transcribe.add_argument("--out", required=True, help="new output directory")
+    transcribe.add_argument("--backend", help="path to the Basic Pitch executable")
+    transcribe.set_defaults(fn=cmd_transcribe)
     focus = sub.add_parser("focus-band", help="write a frequency-focused audio file for investigation")
     focus.add_argument("audio", help="input recording")
     focus.add_argument("--low", type=float, required=True, help="low cutoff in Hz")
     focus.add_argument("--high", type=float, required=True, help="high cutoff in Hz")
     focus.add_argument("--out", required=True, help="new float WAV")
     focus.set_defaults(fn=cmd_focus_band)
+    ranking = sub.add_parser("audio-rank", help="rank aligned reconstructions by mean-square error")
+    ranking.add_argument("reference", help="reference recording")
+    ranking.add_argument("candidates", nargs="+", help="candidate reconstructions")
+    ranking.add_argument("--out", required=True, help="new JSON ranking report")
+    ranking.set_defaults(fn=cmd_audio_rank)
     comparison = sub.add_parser("audio-compare", help="compare aligned reference and candidate recordings")
     comparison.add_argument("reference", help="reference audio")
     comparison.add_argument("candidate", help="candidate reconstruction")
     comparison.add_argument("--out", required=True, help="new JSON comparison report")
+    comparison.add_argument("--segment-seconds", type=float, help="also report frequency-band residuals by time interval (0.01–60 seconds)")
     comparison.set_defaults(fn=cmd_audio_compare)
     frequency = sub.add_parser("frequency-trace", help="transcribe time-stamped spectral peaks from an audio file")
     frequency.add_argument("audio")
@@ -1170,6 +1253,8 @@ def main(argv=None):
     frequency.add_argument("--max-peaks", type=int, default=24)
     frequency.add_argument("--min-level-dbfs", type=float, default=-80.0)
     frequency.add_argument("--relative-threshold-db", type=float, default=-45.0)
+    frequency.add_argument("--pitch-labels", action="store_true", help="annotate spectral peaks with equal-tempered pitch coordinates (not detected notes)")
+    frequency.add_argument("--a4-hz", type=float, default=440.0, help="A4 reference frequency for pitch labels")
     frequency.set_defaults(fn=cmd_frequency_trace)
     rf = sub.add_parser("room-fit", help="seed editable room absorption controls from a measured Earnest formula.json")
     rf.add_argument("room_file", help="base room configuration")

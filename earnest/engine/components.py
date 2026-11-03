@@ -111,6 +111,36 @@ class SoundFieldSpectrumComponent:
                  source=context.inputs["soundfield.input"].source, notes=tuple(result["limits"]))}
 
 
+class SeparationComponent:
+    name = "audio.separate"
+    requires = ("audio.file",)
+    provides = ("audio.separation",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .separation import separate_demucs
+        try:
+            result = separate_demucs(context.inputs["audio.file"].value, context.options["output_dir"], context.options.get("backend"), context.options.get("device", "cpu"))
+        except (OSError, TypeError, KeyError, ValueError, RuntimeError) as exc:
+            raise EngineError("audio.separate: %s" % exc) from exc
+        return {"audio.separation": Artifact(result["schema"], result,
+                source=context.inputs["audio.file"].source, notes=tuple(result["limits"]))}
+
+
+class TranscriptionComponent:
+    name = "audio.transcribe"
+    requires = ("audio.file",)
+    provides = ("audio.transcription",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .transcription import transcribe_basic_pitch
+        try:
+            result = transcribe_basic_pitch(context.inputs["audio.file"].value, context.options["output_dir"], context.options.get("backend"))
+        except (OSError, TypeError, KeyError, ValueError, RuntimeError) as exc:
+            raise EngineError("audio.transcribe: %s" % exc) from exc
+        return {"audio.transcription": Artifact(result["schema"], result,
+                source=context.inputs["audio.file"].source, notes=tuple(result["limits"]))}
+
+
 class BandFocusComponent:
     name = "audio.focus_band"
     requires = ("audio.samples",)
@@ -133,13 +163,15 @@ class AudioComparisonComponent:
     provides = ("audio.comparison", "audio.residual")
 
     def process(self, context: ComponentContext) -> dict[str, Artifact]:
-        from .comparison import compare_audio
+        from .comparison import compare_audio, compare_audio_segments
         ref, candidate = context.inputs["audio.reference"].value, context.inputs["audio.candidate"].value
         try:
             if ref["sample_rate_hz"] != candidate["sample_rate_hz"]:
                 raise ValueError("sample rates differ; resample and align explicitly")
             rate = ref["sample_rate_hz"]
             result, residual = compare_audio(ref["samples"], candidate["samples"], rate)
+            if context.options.get("segment_seconds") is not None:
+                result["segments"] = compare_audio_segments(ref["samples"], candidate["samples"], rate, context.options["segment_seconds"])
         except (TypeError, KeyError, ValueError) as exc:
             raise EngineError("audio.compare: %s" % exc) from exc
         return {"audio.comparison": Artifact(result["schema"], result, notes=tuple(result["limits"])),
@@ -470,7 +502,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), TranscriptionComponent(), SeparationComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

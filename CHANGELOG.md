@@ -4,6 +4,13 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added optional Demucs four-stem separation through the engine and CLI. A generated-tone smoke test produced four output files; musical separation quality is not yet validated.
+- Added a VM application update builder and guest updater with per-file hashes and backups, plus upgrade and changes-since-baseline documentation. This does not change the guest driver or bundle optional model runtimes.
+- Added an optional isolated Basic Pitch backend with `transcribe`, an engine component, note-event/MIDI outputs and provenance. A generated A440 tone produced MIDI note 69 in an offline integration run; general accuracy and instrument separation remain unvalidated.
+- Added candidate reconstruction ranking with source hashes, residual reports by time interval, and optional equal-tempered coordinates on measured spectral peaks. These scores and labels do not independently identify instruments or note events.
+
+## Local build 25633df — 2026-11-03
+
 - Added offline `focus-band` frequency isolation and `audio-compare` residual analysis, exposed as engine components for agent-driven investigation. Tests cover filter selectivity, aligned subtraction, per-band Parseval energy and validation. These are not instrument separation or MIDI transcription.
 
 ## Local build 4aaa619 — 2026-11-03

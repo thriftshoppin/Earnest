@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import numpy as np
+import math
 
 
 def compare_audio(reference, candidate, sample_rate_hz: int) -> tuple[dict, np.ndarray]:
@@ -50,3 +51,23 @@ def compare_audio(reference, candidate, sample_rate_hz: int) -> tuple[dict, np.n
             "limits": ["Inputs must already be sample-aligned; delay and gain are not adjusted.",
                        "Band energy is an analysis of the residual, not proof of which sources are missing.",
                        "Exact reconstruction does not establish a unique source or room explanation."]}, residual
+
+
+def compare_audio_segments(reference, candidate, sample_rate_hz: int, segment_seconds: float) -> list[dict]:
+    """Measure disjoint intervals, including an explicitly shorter last interval."""
+    if isinstance(segment_seconds, bool) or not isinstance(segment_seconds, (int, float)) or not math.isfinite(segment_seconds) or not .01 <= segment_seconds <= 60:
+        raise ValueError("segment duration must be finite and between 0.01 and 60 seconds")
+    # Validate the full pair once, including rate and channel constraints.
+    compare_audio(reference, candidate, sample_rate_hz)
+    ref, pred = np.asarray(reference), np.asarray(candidate)
+    step = max(1, round(segment_seconds * sample_rate_hz))
+    if (len(ref) + step - 1) // step > 10000:
+        raise ValueError("more than 10000 intervals; choose a longer segment duration")
+    result = []
+    for start in range(0, len(ref), step):
+        end = min(start + step, len(ref))
+        report, _ = compare_audio(ref[start:end], pred[start:end], sample_rate_hz)
+        result.append({"start_sample": start, "end_sample_exclusive": end,
+                       "start_s": start / sample_rate_hz, "end_s": end / sample_rate_hz,
+                       "channels": report["channels"]})
+    return result

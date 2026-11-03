@@ -9,10 +9,23 @@ import soundfile as sf
 
 from earnest.engine import Artifact, create_engine
 from earnest.engine.frequency_trace import trace_frequencies
+from earnest.engine.pitch import frequency_to_pitch
 from earnest.cli import main
 
 
 class FrequencyTraceTests(unittest.TestCase):
+    def test_pitch_coordinates_are_not_note_detection(self):
+        self.assertEqual(frequency_to_pitch(440)['nearest_equal_tempered_note'], 'A4')
+        self.assertEqual(frequency_to_pitch(880)['nearest_note_number'], 81)
+        self.assertAlmostEqual(frequency_to_pitch(440 * 2**(.25/12))['cents_from_nearest'], 25)
+        self.assertAlmostEqual(frequency_to_pitch(432,432)['midi_pitch'], 69)
+        for value in (0, -1, float('nan')):
+            with self.assertRaises(ValueError): frequency_to_pitch(value)
+        signal = .25*np.sin(2*np.pi*440*np.arange(4096)/48000)
+        peak = trace_frequencies(signal,48000,pitch_labels=True)['frames'][0]['channels'][0]['peaks'][0]
+        self.assertEqual(peak['pitch_coordinate']['nearest_equal_tempered_note'], 'A4')
+        self.assertAlmostEqual(peak['pitch_coordinate']['midi_pitch'], 69, delta=.02)
+
     def setUp(self):
         self.fs = 48000
         self.time = np.arange(4096) / self.fs
