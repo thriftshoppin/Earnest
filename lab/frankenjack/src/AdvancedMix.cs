@@ -9,11 +9,14 @@ using System.Windows.Forms;
 public sealed class AdvancedMix : Form {
     readonly TrackBar dry = new TrackBar(), center = new TrackBar(), master = new TrackBar(), ceiling = new TrackBar();
     readonly Label dryValue = new Label(), centerValue = new Label(), masterValue = new Label(), ceilingValue = new Label();
-    readonly string path;
+    readonly string path, directEqPath;
+    readonly TrackBar[] directBands = new TrackBar[7];
+    readonly Label[] directValues = new Label[7];
     readonly Dictionary<string, TrackBar> engineBars = new Dictionary<string, TrackBar>();
     readonly Dictionary<string, Label> engineValues = new Dictionary<string, Label>();
     public AdvancedMix(Func<string,int> readControl, Action<string,int> setControl, string controlPath = null) {
         path = controlPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Earnest", "stagejack", "advanced-mix.txt");
+        directEqPath = controlPath == null ? Path.Combine(Path.GetDirectoryName(path), "direct-eq.txt") : controlPath + ".directeq";
         Text = "Earnest | Advanced mix and room controls"; Width = 570; Height = 720; FormBorderStyle = FormBorderStyle.Sizable; AutoScroll = true;
         BackColor = Color.FromArgb(19,25,25); ForeColor = Color.White; StartPosition = FormStartPosition.CenterParent;
         AddRow("DIRECT / DRY", dry, dryValue, 0, 200, 0, 20);
@@ -29,8 +32,32 @@ public sealed class AdvancedMix : Form {
             string key = keys[i]; int min = i < 6 ? (i == 1 || i == 2 ? 10 : 0) : -12, max = i < 6 ? 250 : 12;
             AddEngineRow(labels[i], key, readControl(key), min, max, y, setControl); y += 70;
         }
+        string[] freq = { "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz" };
+        for(int i=0;i<freq.Length;i++) { AddDirectEqRow(freq[i], i, y); y += 70; }
         AutoScrollMinSize = new Size(0, y + 15);
-        LoadSaved(); Write();
+        LoadSaved(); LoadDirectEq(); Write();
+    }
+    void AddDirectEqRow(string frequency, int index, int y) {
+        Controls.Add(new Label { Text="DIRECT EQ " + frequency, Left=18, Top=y, Width=300, Height=22 });
+        var value=new Label { Left=450, Top=y, Width=65, Height=22 }; Controls.Add(value);
+        var bar=new TrackBar { Name="DIRECT EQ " + frequency, Minimum=-12, Maximum=12, Value=0, TickStyle=TickStyle.None };
+        bar.SetBounds(14,y+22,495,36); directBands[index]=bar; directValues[index]=value; value.Text="0 dB";
+        bar.Scroll += delegate { WriteDirectEq(); }; Controls.Add(bar);
+    }
+    void LoadDirectEq() {
+        try {
+            string[] parts=File.ReadAllText(directEqPath).Trim().Split(',');
+            if(parts.Length!=7) return;
+            int[] values=new int[7];
+            for(int i=0;i<7;i++) if(!Int32.TryParse(parts[i],NumberStyles.Integer,CultureInfo.InvariantCulture,out values[i])) return;
+            for(int i=0;i<7;i++) { directBands[i].Value=Math.Max(-12,Math.Min(12,values[i])); directValues[i].Text=directBands[i].Value+" dB"; }
+        } catch(IOException) {} catch(UnauthorizedAccessException) {}
+    }
+    void WriteDirectEq() {
+        string[] values=new string[7];
+        for(int i=0;i<7;i++) { values[i]=directBands[i].Value.ToString(CultureInfo.InvariantCulture); directValues[i].Text=values[i]+" dB"; }
+        Directory.CreateDirectory(Path.GetDirectoryName(directEqPath));
+        File.WriteAllText(directEqPath,String.Join(",",values));
     }
     void AddEngineRow(string title, string key, int initial, int min, int max, int y, Action<string,int> setControl) {
         var caption = new Label { Text = title, Left = 18, Top = y, Width = 300, Height = 22 }; Controls.Add(caption);

@@ -357,3 +357,16 @@ cap. It does not alter the envelope slope. The room solution reports both raw
 physical estimates and `effective_rt60_s`. The statistical energy target is
 normalized separately; this is an artistic model, not a claim that scaling
 decay independently corresponds to a physically unique material change.
+
+
+## Independent direct and reflected EQ (November 2026)
+
+The native bridge has independent seven-section peaking cascades for direct
+and reflected audio. At each center `f0`, `A=10^(G/40)`, `w=2 pi f0/fs`,
+`alpha=sin(w)/(2Q)`, with `Q=sqrt(2)`; coefficients before division by `a0`
+are `b0=1+alpha A`, `b1=-2 cos(w)`, `b2=1-alpha A`, `a0=1+alpha/A`,
+`a1=-2 cos(w)`, `a2=1-alpha/A`. The direct filter precedes dry gain and the
+additive center signal; the reflected filter precedes wet gain. See the
+[W3C Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/).
+Both cascades start at unity. Smoothing and finite-precision implementation are
+not guarantees against all audible transition artifacts.

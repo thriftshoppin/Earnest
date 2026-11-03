@@ -30,8 +30,10 @@ internal static class FrankenjackControlTests {
                 Move(Find(panel,"Reverb"),80);
                 Move(Find(panel,"Reverb tone"),120);
                 Move(Find(panel,"Decay"),150);
+                Move(Find(panel,"DIRECT EQ 1 kHz"),6);
                 Move(Find(panel,"1 kHz"),6);
                 Check(values["Reverb"]==80,"wet control maps to existing engine slider");
+                Check(File.ReadAllText(path+".directeq")=="0,0,0,6,0,0,0","direct EQ writes a separate band control");
                 Check(values["Decay"]==150,"decay time has an independent control");
                 Check(values["Reverb tone"]==120,"absorption maps to existing engine slider");
                 Check(values["1 kHz"]==6,"wet EQ maps to existing engine slider");
@@ -39,7 +41,7 @@ internal static class FrankenjackControlTests {
                 Check(Find(panel,"Reverb").Value==42,"main-to-advanced slider synchronization");
                 Check(values["Reverb"]==80,"synchronization does not re-trigger control callback");
             }
-        } finally { if(File.Exists(path))File.Delete(path); }
+        } finally { if(File.Exists(path))File.Delete(path); if(File.Exists(path+".directeq"))File.Delete(path+".directeq"); }
         return failures==0 ? 0 : 1;
     }
 }

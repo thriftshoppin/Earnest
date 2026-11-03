@@ -98,7 +98,7 @@ public sealed class EarnestEngine {
                 if (!active || id!=generation) return;
                 if (bridge!=null && !bridge.HasExited) { bridge.Kill(); bridge.WaitForExit(); }
                 WriteGain(); WriteEq();
-                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --output-limit 1");
+                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --output-limit 1");
                 run.WorkingDirectory=Path.GetDirectoryName(host); run.UseShellExecute=false; run.CreateNoWindow=false;
                 bridge=Process.Start(run); error=null;
             }

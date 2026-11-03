@@ -214,7 +214,8 @@ internal sealed class ConvolutionProvider : IWaveProvider
     readonly Complex[][][] filters, history;
     readonly Complex[] scratch = new Complex[Size], sum = new Complex[Size];
     readonly float[][] input, output, overlap;
-    internal readonly ReflectionEq Eq;
+    internal readonly ReflectionEq Eq, DirectEq;
+    readonly float[] directFrame;
     byte[] bytes = new byte[0];
     float[] samples = new float[0];
     int position, ring;
@@ -238,6 +239,8 @@ internal sealed class ConvolutionProvider : IWaveProvider
             if (rate != WaveFormat.SampleRate || channels != WaveFormat.Channels || length < 1 || length > rate * 20)
                 throw new InvalidDataException("Room profile does not match endpoint sample rate/channels or is too long");
             Eq = new ReflectionEq(channels, rate);
+            DirectEq = new ReflectionEq(channels, rate);
+            directFrame = new float[channels];
             // Align the direct signal with the 85 ms lookahead and convolution block.
             int delayFrames = (int)Math.Round(rate * 0.085) + Block;
             directDelay = new float[channels][];
@@ -265,6 +268,7 @@ internal sealed class ConvolutionProvider : IWaveProvider
     void ProcessBlock()
     {
         Eq.Update();
+        DirectEq.Update();
         for (int c = 0; c < channels; c++)
         {
             Array.Clear(scratch, 0, Size);
@@ -301,12 +305,13 @@ internal sealed class ConvolutionProvider : IWaveProvider
             currentMaster += 0.002f * (TargetMaster - currentMaster);
             currentCeiling += 0.002f * (TargetCeiling - currentCeiling);
             // Center is an additive, equally distributed mid signal; side is preserved.
-            float mid = channels == 2 ? 0.5f * (directDelay[0][directPos] + directDelay[1][directPos]) : 0f;
+            for (int c = 0; c < channels; c++) directFrame[c] = DirectEq.Process(c, directDelay[c][directPos]);
+            float mid = channels == 2 ? 0.5f * (directFrame[0] + directFrame[1]) : 0f;
             for (int c = 0; c < channels; c++)
             {
                 float incoming = samples[frame + c];
                 input[c][position] = incoming;
-                float direct = directDelay[c][directPos];
+                float direct = directFrame[c];
                 directDelay[c][directPos] = incoming;
                 float value = (Eq.Process(c, output[c][position]) * currentGain + direct * currentDry + mid * currentCenter) * currentMaster;
                 float limit = Math.Min(OutputLimit, currentCeiling);
@@ -439,6 +444,7 @@ internal static class Program
                         string gainFile = Argument(args, "--gain-file");
                         string mixFile = Argument(args, "--mix-file");
                         string wetEqFile = Argument(args, "--wet-eq-file");
+                        string directEqFile = Argument(args, "--direct-eq-file");
                         string limitArg = Argument(args, "--output-limit");
                         if (limitArg != null) {
                             float limit;
@@ -477,6 +483,18 @@ internal static class Program
                                         values[i]=value;
                                     }
                                     if(valid) convolver.Eq.Target=values;
+                                }
+                            } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                            if (directEqFile != null) try {
+                                string[] entries=File.ReadAllText(directEqFile).Trim().Split(',');
+                                if (entries.Length == 7) {
+                                    var values=new float[7]; bool valid=true;
+                                    for(int i=0;i<7;i++) {
+                                        float value;
+                                        if(!Single.TryParse(entries[i],NumberStyles.Float,CultureInfo.InvariantCulture,out value) || Single.IsNaN(value) || Single.IsInfinity(value)) { valid=false; break; }
+                                        values[i]=Math.Max(-12,Math.Min(12,value));
+                                    }
+                                    if(valid) convolver.DirectEq.Target=values;
                                 }
                             } catch (IOException) { } catch (UnauthorizedAccessException) { }
                             Thread.Sleep(100);

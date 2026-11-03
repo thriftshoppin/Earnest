@@ -194,3 +194,25 @@ physical estimate before the artistic decay multiplier; set the multiplier to
 currently rebuilds and restarts its bridge for these changes. Offline checks
 verify generated decay slopes and control bindings; no live audio test has been
 performed for this addition.
+
+## Independent direct EQ in Frankenjack
+
+The native mixer now applies a separate seven-band peaking-EQ cascade to the
+delayed direct path before adding direct gain and shared-channel center. Wet EQ
+remains a separate cascade on the reflected return. The direct EQ bands are
+125, 250, 500, 1000, 2000, 4000, and 8000 Hz, from -12 to +12 dB; all default
+to 0 dB. They are exposed in Advanced Mix and controlled independently through
+`direct-eq.txt`. The same setting applies to every channel, and the center
+reinforcement is derived from the already-filtered direct channels.
+
+Each peaking section uses `A = 10^(G/40)`, `w = 2 pi f0/fs`,
+`alpha = sin(w)/(2Q)` with `Q = sqrt(2)`, and
+`b = [1+alpha A, -2 cos(w), 1-alpha A]`,
+`a = [1+alpha/A, -2 cos(w), 1-alpha/A]`, normalized by `a0`.
+The [W3C Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/)
+documents the coefficients. Coefficients are smoothed over audio blocks, but
+filter-state continuity is not a guarantee of artifact-free abrupt changes.
+Offline checks verify each band's ±6 dB response at its center, verify direct
+EQ does not alter the wet return, and exercise the UI control file. No live
+device, headset, or listening validation was performed. Deployment requires
+updating both the Frankenjack UI and its native audio host together.

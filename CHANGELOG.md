@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added separate unity-by-default seven-band direct EQ in Frankenjack Advanced Mix and the native bridge, independent of reflection EQ. Offline tests verify ±6 dB at every band center, path isolation, and UI file bindings.
+
+## Local build 9bb7239 — 2026-11-03
+
 - Added an independent decay-time multiplier to the room engine, Room Studio, and Frankenjack Advanced Mix; retained the separate tail cutoff control. Added synthesized decay-slope, profile, adapter and offline UI-binding checks.
 
 ## Local build 8fba240 — 2026-11-03
