@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from . import formula, mixcurve, plots, probe, report, room, stage, suite
+from . import mixcurve, plots, probe, report, stage, suite
 from .dsp import db
 from .io import FS, new_run, save_json
 from .trace import HopFail, Trace
@@ -43,10 +43,14 @@ def classify(path) -> dict:
     return {"role": "other", "room": room_from_filename(path), "mix": None}
 
 
-def _sets_from_blocks(dry: np.ndarray, manifest: dict, wet_blocks: dict):
+def _sets_from_blocks(dry: np.ndarray, manifest: dict, wet_blocks: dict, reference_blocks=None):
     by = {b["name"]: b for b in manifest["blocks"]}
 
     def d(name):
+        if reference_blocks is not None:
+            if name not in reference_blocks:
+                raise ValueError("dry reference is missing block %s" % name)
+            return reference_blocks[name]
         b = by[name]
         return dry[b["start_sample"]: b["start_sample"] + b["length_samples"]]
     sets = {"a": {}, "b": {}, "rep": {}}
@@ -54,7 +58,8 @@ def _sets_from_blocks(dry: np.ndarray, manifest: dict, wet_blocks: dict):
         for side in ("L", "R"):
             n = "sweep_%s%s" % (side, suf)
             if n in by and n in wet_blocks:
-                sets[key][side] = ((d("sweep_" + side) if key == "rep" else d(n)), wet_blocks[n])
+                ref_name = n if key != "rep" or reference_blocks is not None else "sweep_" + side
+                sets[key][side] = (d(ref_name), wet_blocks[n])
     clicks = {n: (d(n), wet_blocks[n]) for n in ("clicks_panned", "clicks_mono") if n in by and n in wet_blocks}
     dry_w = {n: d(n) for n in stage.BLOCKS if n in by}
     return sets, clicks, dry_w
@@ -159,7 +164,7 @@ def ingest(path, manifest, dry, labels, tr: Trace, info: dict):
 
 # ----------------------------------------------------------------------------- hops 6-8, per pass
 
-def run_pass(tr: Trace, src, start: int, inferred: bool, manifest, dry, G: float, cal_ok: bool, label, folder: Path, room_name: str, index: int, plot_png: bool = True) -> dict:
+def run_pass(tr: Trace, src, start: int, inferred: bool, manifest, dry, G: float, cal_ok: bool, label, folder: Path, room_name: str, index: int, plot_png: bool = True, reference_blocks=None, reference_path=None) -> dict:
     """LEVEL, ROOM, WRITE for one pass. Returns the row used by the summary (status ok / EMPTY)."""
     row = {"index": index, "label": label, "start_s": round(start / FS, 3), "empty_blocks": [], "inferred": inferred}
     blocks = suite.cut_blocks(src, manifest, start)
@@ -187,8 +192,21 @@ def run_pass(tr: Trace, src, start: int, inferred: bool, manifest, dry, G: float
     for n in blocks:
         blocks[n] = blocks[n] / G
     with tr.hop("ROOM") as h:
-        sets, clicks, dry_w = _sets_from_blocks(dry, manifest, blocks)
-        res, plot = room.run_room_sets(sets, clicks, [])
+        sets, clicks, dry_w = _sets_from_blocks(dry, manifest, blocks, reference_blocks)
+        from .engine import Artifact, create_engine
+        engine_run = create_engine().execute(
+            ("reverb.analyze", "acoustic.infer_character"),
+            {"reverb.sweeps": Artifact("earnest.reverb-sweeps.v1",
+                                        {"sets": sets, "clicks": clicks, "notes": []},
+                                        source="%s pass %d Mix %s" % (room_name, index, label))},
+            {"reverb.analyze": {"source": "%s pass %d Mix %s" % (room_name, index, label)}})
+        res = engine_run.artifacts["reverb.observations"].value
+        plot = engine_run.artifacts["reverb.plot_data"].value
+        measurement = engine_run.artifacts["reverb.measurement"].value
+        if reference_path:
+            measurement["dry_reference"] = str(Path(reference_path).resolve())
+            res["dry_reference"] = str(Path(reference_path).resolve())
+        hypotheses = engine_run.artifacts["acoustic.hypotheses"].value
         sg = stage.compute(dry_w, blocks)
         row.update({"status": "ok", "room": res, "stage": sg})
         dm = res["direct_matrix"]
@@ -199,6 +217,8 @@ def run_pass(tr: Trace, src, start: int, inferred: bool, manifest, dry, G: float
         msg = "direct matrix (out L/R per input) %s, IR energy %.1f dB, latency %.1f ms, tail %s (%.1f dB re direct), early taps %s (%d found)%s" % (
             pk, db(np.sqrt(e_ir)), res["latency_ms"], "absent" if lv["no_tail"] else "present", lv["tail_level_db"] if lv["tail_level_db"] is not None else float("nan"),
             res["early_taps"]["status"], res["early_taps"]["count_found"], "" if res["ir_looks_valid"] else "; sweep does not deconvolve cleanly (IR decay %s dB)" % res["ir_decay_db"])
+        if reference_path:
+            msg += "; measured against dry reference %s" % Path(reference_path).name
         if not res["ir_looks_valid"]:
             h.warn(msg)
         else:
@@ -209,9 +229,10 @@ def run_pass(tr: Trace, src, start: int, inferred: bool, manifest, dry, G: float
         res2 = dict(res)
         res2["label"] = label
         save_json(folder / "room.json", res2)
-        save_json(folder / "formula.json", formula.build(res, "%s pass %d Mix %s" % (room_name, index, label)))
+        save_json(folder / "formula.json", measurement)
+        save_json(folder / "inference.json", hypotheses)
         report.room_report(res, folder / "report.md", "%s, pass %d, Mix %s" % (room_name, index, label))
-        names = ["room.json", "formula.json", "report.md"]
+        names = ["room.json", "formula.json", "inference.json", "report.md"]
         if plot_png:
             plots.room_png(folder / "room.png", res, plot, "earnest room: %s pass %d Mix %s" % (room_name, index, label))
             names.append("room.png")
@@ -238,6 +259,8 @@ def process_room(room_name: str, members: list, dry_member=None, manifest_path=N
     cal = {"G": 1.0, "G_db": 0.0, "ok": False, "warnings": [], "checks": {}}
     rows = []
     stop = False
+    reference_blocks = None
+    reference_path = str(dry_member["path"]) if dry_member else None
 
     def file_trace(path):
         tr = Trace(Path(path).name)
@@ -251,6 +274,7 @@ def process_room(room_name: str, members: list, dry_member=None, manifest_path=N
         if dry_cache is not None and key in dry_cache:
             c = dry_cache[key]
             cal, row, info, tr0 = c["cal"], c["row"], dict(c["info"]), c["trace"]
+            reference_blocks = c.get("reference_blocks")
             tr = Trace(Path(dry_member["path"]).name, log=False)
             tr.hops = list(tr0.hops)
             tr.failed = tr0.failed
@@ -282,7 +306,8 @@ def process_room(room_name: str, members: list, dry_member=None, manifest_path=N
                 for w in cal["warnings"]:
                     problems.append("dry reference: " + w)
                 G = cal["G"] if cal["ok"] else 1.0
-                row = run_pass(tr, src, start, False, manifest, dry, G, cal["ok"], 0, out / "step_mix0", room_name, 0, plot_png)
+                reference_blocks = {name: block / G for name, block in suite.cut_blocks(src, manifest, start).items()}
+                row = run_pass(tr, src, start, False, manifest, dry, G, cal["ok"], 0, out / "step_mix0", room_name, 0, plot_png, reference_blocks, reference_path)
                 rows.append(row)
                 info["status"] = tr.status
             except HopFail as e:
@@ -293,9 +318,14 @@ def process_room(room_name: str, members: list, dry_member=None, manifest_path=N
                 stop = stop_on_fail
             if dry_cache is not None:
                 snap = {k: v for k, v in info.items() if k != "_tr"}
-                dry_cache[key] = {"cal": cal, "row": row, "info": snap, "trace": tr}
+                dry_cache[key] = {"cal": cal, "row": row, "info": snap, "trace": tr,
+                                  "reference_blocks": reference_blocks}
     else:
         summary["warnings"].append("no dry reference file: levels are not calibrated" + ("" if not members or members[0].get("label") is not None else " (multi-pass file: its last pass is used when it is Mix 0)"))
+    if dry_member and reference_blocks is None:
+        problems.append("dry reference could not be read; room comparisons stopped")
+        stop = True
+    summary["analysis_reference"] = str(Path(reference_path).resolve()) if reference_blocks is not None else "generated probe"
     G = cal["G"] if cal["ok"] else 1.0
     # --- the room files
     for mbr in members:
@@ -322,7 +352,7 @@ def process_room(room_name: str, members: list, dry_member=None, manifest_path=N
                     traces.append(sub)
                 folder = out / ("step_mix%s" % lab if n == 1 else "step%d_mix%s" % (i + 1, lab))
                 try:
-                    row = run_pass(sub, src, p, p in sinfo["inferred"], manifest, dry, G, cal["ok"], lab, folder, room_name, len(rows) + 1, plot_png)
+                    row = run_pass(sub, src, p, p in sinfo["inferred"], manifest, dry, G, cal["ok"], lab, folder, room_name, len(rows) + 1, plot_png, reference_blocks, reference_path)
                     rows.append(row)
                 except HopFail as e:
                     rows.append({"index": len(rows) + 1, "label": lab, "start_s": round(p / FS, 3), "status": "EMPTY" if e.hop == "LEVEL" else "FAIL", "empty_blocks": [], "failed_hop": e.hop})

@@ -109,6 +109,7 @@ def dry_signal(manifest: dict, dry_path=None) -> np.ndarray:
     for b in manifest["blocks"]:
         s = block_signal(b["name"])
         out[b["start_sample"]: b["start_sample"] + len(s)] = s[: manifest["total_samples"] - b["start_sample"]]
+    out *= 10 ** (float(manifest.get("reference_gain_db", 0.0)) / 20.0)
     return out
 
 

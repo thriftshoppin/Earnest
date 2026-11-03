@@ -7,6 +7,7 @@ contourpy==1.4.0
 cryptography==50.0.2
 cycler==0.12.1
 fonttools==4.68.0
+h5py==3.16.0
 frozenlist==1.8.0
 idna==3.20
 kiwisolver==1.5.1
@@ -23,5 +24,6 @@ python-dateutil==4.0.0
 scipy==1.18.1
 soundfile==0.14.0
 typing_extensions==4.16.0
+tkinterdnd2==0.7.0
 tzdata==2026.6
 yarl==1.25.1

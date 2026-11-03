@@ -23,16 +23,26 @@ def edges(fc: float, per_octave: int = 1):
 
 
 def bandpass_fft(x: np.ndarray, fs: float, fc: float, per_octave: int = 1, order: int = 6) -> np.ndarray:
-    """Zero-phase band-pass with a smooth Butterworth-shaped magnitude. A brick-wall mask would ring and corrupt decay measurements."""
+    """Zero-phase band-pass with zero extension on both sides.
+
+    Half a second of guard samples reduces circular wraparound. The filter is
+    noncausal: pre-ringing remains and is not a physical real-time response.
+    """
+    from scipy.fft import next_fast_len
     n = len(x)
-    N = n + int(0.5 * fs)
-    X = np.fft.rfft(x, N)
+    if n == 0:
+        return np.asarray(x, dtype=float).copy()
+    guard = max(int(0.5 * fs), 1)
+    N = next_fast_len(n + 2 * guard)
+    padded = np.zeros(N, dtype=float)
+    padded[guard:guard + n] = x
+    X = np.fft.rfft(padded)
     f = np.fft.rfftfreq(N, 1.0 / fs)
     lo, hi = edges(fc, per_octave)
     with np.errstate(divide="ignore", over="ignore"):
         lp = 1.0 / np.sqrt(1.0 + (f / hi) ** (2 * order))
         hp = np.where(f > 0, 1.0 / np.sqrt(1.0 + (lo / np.maximum(f, 1e-9)) ** (2 * order)), 0.0)
-    return np.fft.irfft(X * lp * hp, N)[:n]
+    return np.fft.irfft(X * lp * hp, N)[guard:guard + n]
 
 
 def parabolic(y: np.ndarray, k: int) -> float:
@@ -66,12 +76,19 @@ def deconvolve(dry: np.ndarray, wet: np.ndarray, max_len: int | None = None, eps
     """Impulse response h with wet ~ dry * h (single channels), by regularised spectral division. Works for any broadband dry signal (sweep or noise)
     and absorbs latency, including a wet file that starts earlier than the dry one (negative lag, up to neg_s). Returns (h, neg): h[neg] is time zero
     of the dry/wet alignment. Distortion products of a non-linear system sit before the main arrival, so only the part after the peak is used."""
+    if len(dry) == 0 or len(wet) == 0 or not np.isfinite(dry).all() or not np.isfinite(wet).all():
+        raise ValueError("dry and wet signals must be finite and non-empty")
+    if not np.isfinite(eps_rel) or eps_rel <= 0:
+        raise ValueError("eps_rel must be positive and finite")
     n = len(dry) + len(wet)
     N = 1 << (n - 1).bit_length()
     X = np.fft.rfft(dry, N)
     Y = np.fft.rfft(wet, N)
     P = np.abs(X) ** 2
-    eps = eps_rel * P.max()
+    peak_power = P.max()
+    if not np.isfinite(peak_power) or peak_power <= 0:
+        raise ValueError("dry reference is silent or has non-finite spectral power")
+    eps = eps_rel * peak_power
     H = np.conj(X) * Y / (P + eps)
     h = np.fft.irfft(H, N)
     neg = min(int(neg_s * fs), N // 4)
@@ -119,15 +136,19 @@ def decay(e: np.ndarray, fs: float):
 
 
 def iacc(a: np.ndarray, b: np.ndarray, fs: float, max_ms: float = 1.0) -> float | None:
-    """Maximum normalised cross-correlation of a and b over lags within +-max_ms."""
-    if len(a) < 64 or a.std() == 0 or b.std() == 0:
+    """Maximum absolute normalised cross-correlation over the requested lags."""
+    if len(a) != len(b):
+        raise ValueError("correlation signals must have equal lengths")
+    if fs <= 0 or max_ms < 0:
+        raise ValueError("sample rate must be positive and lag must be nonnegative")
+    if len(a) < 64 or not np.isfinite(a).all() or not np.isfinite(b).all() or a.std() == 0 or b.std() == 0:
         return None
     n = len(a)
     N = 1 << (2 * n - 1).bit_length()
     c = np.fft.irfft(np.conj(np.fft.rfft(a, N)) * np.fft.rfft(b, N), N)
-    m = int(max_ms * fs / 1000)
+    m = min(int(max_ms * fs / 1000), n - 1)
     seg = np.concatenate([c[-m:], c[: m + 1]]) if m > 0 else c[:1]
-    return float(seg.max() / np.sqrt(np.sum(a * a) * np.sum(b * b)))
+    return min(1.0, float(np.max(np.abs(seg)) / np.sqrt(np.sum(a * a) * np.sum(b * b))))
 
 
 def true_peak_db(x: np.ndarray) -> float:

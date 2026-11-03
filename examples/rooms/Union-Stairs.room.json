@@ -1,0 +1,519 @@
+{
+ "schema": "earnest.room.v1",
+ "units": "m",
+ "geometry": {
+  "type": "shoebox",
+  "dimensions": [
+   8.0,
+   5.0,
+   2.8
+  ]
+ },
+ "materials": [
+  {
+   "id": "painted_plaster",
+   "bands_hz": [
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000
+   ],
+   "absorption": [
+    0.08,
+    0.07,
+    0.06,
+    0.05,
+    0.04,
+    0.04,
+    0.04
+   ],
+   "scattering": [
+    0.05,
+    0.05,
+    0.08,
+    0.1,
+    0.12,
+    0.15,
+    0.18
+   ]
+  }
+ ],
+ "surfaces": {
+  "x_min": {
+   "material_id": "painted_plaster"
+  },
+  "x_max": {
+   "material_id": "painted_plaster"
+  },
+  "y_min": {
+   "material_id": "painted_plaster"
+  },
+  "y_max": {
+   "material_id": "painted_plaster"
+  },
+  "z_min": {
+   "material_id": "painted_plaster"
+  },
+  "z_max": {
+   "material_id": "painted_plaster"
+  }
+ },
+ "sources": [
+  {
+   "id": "FL",
+   "position": [
+    5.3,
+    3.25,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "FR",
+   "position": [
+    5.3,
+    1.75,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "FC",
+   "position": [
+    5.5,
+    2.5,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "BL",
+   "position": [
+    2.7,
+    3.25,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "BR",
+   "position": [
+    2.7,
+    1.75,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "SL",
+   "position": [
+    4.0,
+    4.0,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "id": "SR",
+   "position": [
+    4.0,
+    1.0,
+    1.4
+   ],
+   "level_db": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ ],
+ "receivers": [
+  {
+   "id": "listener",
+   "position": [
+    4.0,
+    2.5,
+    1.4
+   ]
+  }
+ ],
+ "environment": {
+  "temperature_c": 20.0,
+  "humidity_percent": 50.0
+ },
+ "engine_controls": {
+  "reflection_order": 4,
+  "decay_model": "eyring",
+  "absorption_scale": [
+   0.49581457853975164,
+   0.5747572156935559,
+   0.6947026067291375,
+   0.9066378710380079,
+   1.380307247081575,
+   1.7755552271842823,
+   2.554392189321823
+  ],
+  "scattering_scale": [
+   1,
+   1,
+   1,
+   1,
+   1,
+   1,
+   1
+  ],
+  "diffuse_energy_scale": 1.0,
+  "tail_duration_scale": 1.0
+ },
+ "analysis_evidence": {
+  "schema": "earnest.room-analysis.v1",
+  "source_type": "measured_reverb_formula",
+  "input_schema": "earnest.reverb-formula.v1",
+  "source": "Union Stairs pass 2 Mix 20",
+  "reverb_class": "BandLab Univerb Union Stairs",
+  "fit_decay_model": "eyring",
+  "plugin_metadata": {},
+  "inferred_character": "decay measured; early geometry unresolved",
+  "modulation_detected_bands_hz": [],
+  "median_measured_rt60_s": 2.544,
+  "early_tap_count": 0,
+  "measured_tail": {
+   "bands_hz": [
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000
+   ],
+   "level_db": [
+    -4.3,
+    -5.85,
+    -8.65,
+    -13.47,
+    -15.6,
+    -14.4,
+    -19.27
+   ],
+   "rt60_s": [
+    2.916,
+    2.874,
+    2.772,
+    2.544,
+    2.078,
+    1.602,
+    1.095
+   ],
+   "edt_s": [
+    3.246,
+    3.392,
+    3.138,
+    2.887,
+    2.102,
+    1.558,
+    0.964
+   ],
+   "pre_delay_ms": [
+    21.58,
+    10.79,
+    7.12,
+    6.71,
+    6.6,
+    6.58,
+    14.33
+   ],
+   "buildup_ms": [
+    1.0,
+    9.54,
+    11.85,
+    32.96,
+    9.67,
+    33.21,
+    25.21
+   ],
+   "iacc": [
+    0.056,
+    0.041,
+    0.022,
+    0.037,
+    0.019,
+    0.014,
+    0.012
+   ],
+   "modulation": [
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null
+   ]
+  },
+  "early_taps": {
+   "status": "unresolved",
+   "count_found": 0,
+   "taps": [],
+   "rule": "peaks >= 6 dB above the local floor (2.08 x the median of the echogram in a +-10 ms window, which equals its 95th percentile for noise-like tails but is not raised by neighbouring taps), also 6 dB above everything within 0.45-1.5 ms either side (isolated), no weaker than 40 dB below the direct sound, 0.5-80 ms after the direct sound, at most 24 kept"
+  },
+  "fit": [
+   {
+    "hz": 125,
+    "measured_rt60_s": 2.916,
+    "predicted_rt60_s": 2.916,
+    "absorption_scale": 0.49581457853975164,
+    "status": "fit"
+   },
+   {
+    "hz": 250,
+    "measured_rt60_s": 2.874,
+    "predicted_rt60_s": 2.874,
+    "absorption_scale": 0.5747572156935559,
+    "status": "fit"
+   },
+   {
+    "hz": 500,
+    "measured_rt60_s": 2.772,
+    "predicted_rt60_s": 2.772,
+    "absorption_scale": 0.6947026067291375,
+    "status": "fit"
+   },
+   {
+    "hz": 1000,
+    "measured_rt60_s": 2.544,
+    "predicted_rt60_s": 2.544,
+    "absorption_scale": 0.9066378710380079,
+    "status": "fit"
+   },
+   {
+    "hz": 2000,
+    "measured_rt60_s": 2.078,
+    "predicted_rt60_s": 2.078,
+    "absorption_scale": 1.380307247081575,
+    "status": "fit"
+   },
+   {
+    "hz": 4000,
+    "measured_rt60_s": 1.602,
+    "predicted_rt60_s": 1.602,
+    "absorption_scale": 1.7755552271842823,
+    "status": "fit"
+   },
+   {
+    "hz": 8000,
+    "measured_rt60_s": 1.095,
+    "predicted_rt60_s": 1.095,
+    "absorption_scale": 2.554392189321823,
+    "status": "fit"
+   }
+  ],
+  "interpretation": "Character is a heuristic description of measured decay and reflections, not a plugin-family identification. Measured decay seeds editable room controls but cannot uniquely identify geometry or per-wall materials.",
+  "inference": {
+   "schema": "earnest.acoustic-hypotheses.v1",
+   "candidates": [
+    {
+     "character": "unresolved reverb character",
+     "confidence": "low",
+     "evidence": [
+      "current measurements do not distinguish a response family"
+     ]
+    }
+   ],
+   "features": {
+    "median_rt60_s": 2.544,
+    "measured_band_count": 7,
+    "modulation_detected_bands_hz": [],
+    "early_tap_count": 0,
+    "mean_tail_iacc": 0.028714285714285716
+   },
+   "external_reverb_label": null,
+   "external_label_is_inference": false,
+   "limitations": [
+    "Character clues do not identify plugin algorithms such as plate or spring.",
+    "Measured decay and early reflections do not uniquely recover room geometry or materials."
+   ],
+   "measurement": {
+    "version": 1,
+    "fs": 48000,
+    "source": "Union Stairs pass 2 Mix 20",
+    "inputs": [
+     "L",
+     "R"
+    ],
+    "input_mode": "stereo",
+    "nonlinear_or_time_variant": false,
+    "M": [
+     [
+      0.9284910936182443,
+      -2.399378062255876e-09
+     ],
+     [
+      -2.3970076195387636e-09,
+      0.9286840773333404
+     ]
+    ],
+    "early_taps": {
+     "status": "unresolved",
+     "count_found": 0,
+     "taps": [],
+     "rule": "peaks >= 6 dB above the local floor (2.08 x the median of the echogram in a +-10 ms window, which equals its 95th percentile for noise-like tails but is not raised by neighbouring taps), also 6 dB above everything within 0.45-1.5 ms either side (isolated), no weaker than 40 dB below the direct sound, 0.5-80 ms after the direct sound, at most 24 kept"
+    },
+    "tail": {
+     "bands_hz": [
+      125,
+      250,
+      500,
+      1000,
+      2000,
+      4000,
+      8000
+     ],
+     "level_db": [
+      -4.3,
+      -5.85,
+      -8.65,
+      -13.47,
+      -15.6,
+      -14.4,
+      -19.27
+     ],
+     "rt60_s": [
+      2.916,
+      2.874,
+      2.772,
+      2.544,
+      2.078,
+      1.602,
+      1.095
+     ],
+     "t20_s": [
+      3.155,
+      3.1,
+      2.916,
+      2.609,
+      2.035,
+      1.577,
+      1.059
+     ],
+     "t30_s": [
+      2.916,
+      2.874,
+      2.772,
+      2.544,
+      2.078,
+      1.602,
+      1.095
+     ],
+     "edt_s": [
+      3.246,
+      3.392,
+      3.138,
+      2.887,
+      2.102,
+      1.558,
+      0.964
+     ],
+     "pre_delay_ms": [
+      21.58,
+      10.79,
+      7.12,
+      6.71,
+      6.6,
+      6.58,
+      14.33
+     ],
+     "buildup_ms": [
+      1.0,
+      9.54,
+      11.85,
+      32.96,
+      9.67,
+      33.21,
+      25.21
+     ],
+     "iacc": [
+      0.056,
+      0.041,
+      0.022,
+      0.037,
+      0.019,
+      0.014,
+      0.012
+     ],
+     "modulation": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+     ]
+    },
+    "room": {
+     "drr_db": 15.83,
+     "c50_db": 17.53,
+     "c80_db": 18.34
+    },
+    "notes": "tail is statistical: noise shaped by these numbers, not the original waveform; linear time-invariant assumption (see nonlinear_or_time_variant)",
+    "dry_reference": "dry reference omitted; use a locally supplied reference"
+   }
+  }
+ }
+}

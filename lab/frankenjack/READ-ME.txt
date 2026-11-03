@@ -1,0 +1,12 @@
+FRANKENJACK ADVANCED MIX - EXPERIMENTAL VM UPDATE
+
+1. Stop any Earnest CLI route with Ctrl+C. Close the Frankenjack window, including any audio-host console it started.
+2. Extract this entire ZIP into a new folder inside the VM. Run Install-Update.cmd. It backs up and replaces the two Earnest Frankenjack programs inside Earnest-VM-Lab; it does not reinstall the driver or change the room file.
+3. Launch Earnest using Open-Earnest.cmd, then Audition > Open StageJack. Choose the VM's Earnest virtual speakers as input and High Definition Audio Device as output. Set the virtual speakers as the VM's default output, then start Frankenjack.
+4. Select ADVANCED MIX near the top of Frankenjack. Direct, center, master and peak-ceiling controls appear in a separate window. Wet level remains the Reverb slider on the main window. They update while the bridge is running.
+
+Default direct and center are 0%, master is 100%, and peak ceiling is 10%, preserving the previous wet-only starting point. These values are saved between sessions. You control changes and listening volume. Center is an additive mid signal: it also affects centered instruments. The ceiling is a hard clamp, not a transparent limiter. It can be raised manually; high values can produce loud or clipped sound.
+
+The dry path is delayed to match the bridge's fixed 85 ms lookahead plus the 512-sample processing block. Changing the room's geometry does not alter this alignment. This is a first implementation and has not been tested end to end in the VM. DSP control changes are smoothed, but modifying room controls can still rebuild and restart the bridge. Buffering and dropout fixes are not included in this update.
+
+To roll back: close Frankenjack and copy the two previous executables from the dated backup folder back into their original app locations.
