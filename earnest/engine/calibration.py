@@ -21,6 +21,7 @@ def _target_absorption_scale(room: RoomSpec, band: int, target_rt60: float) -> t
             denominator = alpha_area
         else:
             denominator = -surface_area * math.log1p(-mean_alpha) if mean_alpha < 1.0 else math.inf
+        denominator += room.air_absorption_area_m2(band)
         if math.isinf(denominator):
             return 0.0
         return constant * room.volume_m3 / denominator if denominator > 0 else math.inf

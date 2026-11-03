@@ -214,6 +214,15 @@ class RoomSpec:
         # Dry-air temperature approximation; humidity and pressure correction are not yet modeled.
         return 331.3 * math.sqrt(1.0 + self.temperature_c / 273.15)
 
+    def air_absorption_area_m2(self, band: int) -> float:
+        """Equivalent diffuse-field area 4mV; m is power attenuation in nepers/m."""
+        if not self.air_absorption_enabled:
+            return 0.0
+        from .physics import air_absorption_db_per_m
+        alpha_db_m = air_absorption_db_per_m(BANDS_HZ[band], self.temperature_c,
+                                            self.humidity_percent, self.pressure_pa)
+        return 4.0 * self.volume_m3 * alpha_db_m * math.log(10.0) / 10.0
+
     def decay_estimates(self) -> list[dict[str, float | int]]:
         areas = self.wall_areas()
         surface_area = sum(areas.values())
@@ -222,9 +231,11 @@ class RoomSpec:
         for index, band in enumerate(BANDS_HZ):
             absorption_area = sum(areas[w] * self.absorption(w, index) for w in WALLS)
             mean_alpha = absorption_area / surface_area
-            sabine = sabine_constant * self.volume_m3 / absorption_area if absorption_area > 0 else None
-            eyring_den = -surface_area * math.log1p(-mean_alpha) if mean_alpha < 1 else math.inf
+            air_area = self.air_absorption_area_m2(index)
+            total_sabine = absorption_area + air_area
+            sabine = sabine_constant * self.volume_m3 / total_sabine if total_sabine > 0 else None
+            eyring_den = -surface_area * math.log1p(-mean_alpha) + air_area if mean_alpha < 1 else math.inf
             eyring = sabine_constant * self.volume_m3 / eyring_den if eyring_den > 0 and math.isfinite(eyring_den) else (0.0 if mean_alpha == 1 else None)
             out.append({"hz": band, "absorption_area_m2": absorption_area, "mean_absorption": mean_alpha,
-                        "sabine_rt60_s": sabine, "eyring_rt60_s": eyring})
+                        "air_absorption_area_m2": air_area, "sabine_rt60_s": sabine, "eyring_rt60_s": eyring})
         return out

@@ -13,7 +13,8 @@ from earnest.engine.physics import (air_absorption_db_per_m, ideal_string_modes,
                                     ideal_pipe_modes, stiff_string_modes, circular_membrane_modes,
                                     directivity_pressure)
 from earnest.engine.shoebox import image_paths
-from earnest.engine.solve import solve_room
+from earnest.engine.solve import solve_room, _late_field
+from earnest.engine.calibration import _target_absorption_scale
 from earnest.engine.render import render_room
 
 
@@ -54,6 +55,52 @@ class AirAbsorptionTests(unittest.TestCase):
                 attenuation = air_absorption_db_per_m(f, 20, 50)
                 self.assertAlmostEqual(changed[key].gain_by_band[i],
                     p.gain_by_band[i] * 10 ** (-attenuation * p.distance_m / 20), places=12)
+
+    def test_diffuse_decay_air_term_and_legacy_compatibility(self):
+        doc = _room_template()
+        baseline = RoomSpec.from_dict(doc)
+        doc['environment']['air_absorption_enabled'] = True
+        room = RoomSpec.from_dict(doc)
+        areas = room.wall_areas()
+        surface = sum(areas.values())
+        c = room.sound_speed_m_s()
+        for band, row in enumerate(room.decay_estimates()):
+            alpha_db = air_absorption_db_per_m(row['hz'], 20, 50, 101325)
+            air_area = 4 * room.volume_m3 * alpha_db * math.log(10) / 10
+            a = row['absorption_area_m2']
+            expected_sabine = (24 * math.log(10) / c) * room.volume_m3 / (a + air_area)
+            expected_eyring = (24 * math.log(10) / c) * room.volume_m3 / (-surface * math.log1p(-a/surface) + air_area)
+            self.assertAlmostEqual(row['air_absorption_area_m2'], air_area, places=12)
+            self.assertAlmostEqual(row['sabine_rt60_s'], expected_sabine, places=12)
+            self.assertAlmostEqual(row['eyring_rt60_s'], expected_eyring, places=12)
+            self.assertLess(row['sabine_rt60_s'], baseline.decay_estimates()[band]['sabine_rt60_s'])
+        self.assertEqual(baseline.air_absorption_area_m2(6), 0)
+
+    def test_fit_uses_same_air_corrected_equation(self):
+        for model in ('sabine', 'eyring'):
+            doc = _room_template()
+            doc['environment']['air_absorption_enabled'] = True
+            doc['engine_controls']['decay_model'] = model
+            doc['engine_controls']['absorption_scale'] = [0.6] * 7
+            target_room = RoomSpec.from_dict(doc)
+            for band, row in enumerate(target_room.decay_estimates()):
+                target = row[model + '_rt60_s']
+                scale, predicted = _target_absorption_scale(target_room, band, target)
+                self.assertAlmostEqual(scale, .6, places=9)
+                self.assertAlmostEqual(predicted, target, places=9)
+
+    def test_air_only_absorption_has_finite_decay_and_tail(self):
+        doc = _room_template()
+        doc['materials'][0]['absorption'] = [0] * 7
+        doc['environment']['air_absorption_enabled'] = True
+        room = RoomSpec.from_dict(doc)
+        rt = room.decay_estimates()[6]['sabine_rt60_s']
+        self.assertGreater(rt, 0)
+        tail, meta = _late_field(room, 6, 1, 0, rt, 24000, 42)
+        self.assertGreater(len(tail), 0)
+        self.assertAlmostEqual(float(np.sum(tail**2)), meta['late_energy'], places=10)
+        doc['environment']['air_absorption_enabled'] = False
+        self.assertIsNone(RoomSpec.from_dict(doc).decay_estimates()[6]['sabine_rt60_s'])
 
     def test_points_on_each_room_boundary_are_rejected(self):
         document = _room_template()

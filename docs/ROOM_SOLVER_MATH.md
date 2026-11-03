@@ -88,7 +88,7 @@ For surface `j` with area `S_j`, absorption coefficient `alpha_{j,b}` and scatte
 
 Require `0<=alpha<=1`, `0<=s<=1`. Of incident energy, absorption is `alpha`; reflected energy is `(1-alpha)`; its specular and diffuse portions are respectively `(1-alpha)(1-s)` and `(1-alpha)s`. At each interaction these fractions must sum to `alpha+(1-alpha)(1-s)+(1-alpha)s=1`. That conservation check prevents a solver from accidentally creating energy.
 
-As broad decay sanity checks, use Sabine `T60_b ~= 0.161 V/A_b` seconds (SI) in the diffuse-field/low-absorption regime, and Eyring `T60_b ~= 0.161 V / [-S ln(1-alpha_bar_b)]` as an alternative for more uniform absorption. These are global statistical estimates; neither determines where reflections occur or where energy is concentrated. ISO 9613-1 atmospheric attenuation can optionally affect explicit image paths; it is not included in these statistical decay estimates.
+As broad decay sanity checks, use Sabine `T60_b ~= 0.161 V/A_b` seconds (SI) in the diffuse-field/low-absorption regime, and Eyring `T60_b ~= 0.161 V / [-S ln(1-alpha_bar_b)]` as an alternative for more uniform absorption. These are global statistical estimates; neither determines where reflections occur or where energy is concentrated. When enabled, ISO 9613-1 atmospheric attenuation affects explicit image paths and enters both statistical decay estimates through the `4mV` air-absorption area; details and units are below.
 
 ### 2. Propagation paths and early response
 
@@ -208,7 +208,7 @@ For sample audio, the current trustworthy path is a matched dry source and wet r
 
 ### Current engine boundary
 
-The CLI calls `earnest.engine.RoomSpec` for validation and `solve_room()` for computation. The engine separates room/material input (`engine/room.py`), rectangular image paths (`engine/shoebox.py`), solve orchestration/results (`engine/solve.py`), and audio driving (`engine/render.py`). `room-solve` writes per-band WAV IRs and a `solution.json` manifest. `simulate` solves a room, convolves each input source through its source-to-receiver responses, writes the resulting audio with its decay tail, and saves output level/band analysis. The current renderer sums specular path impulses and a statistical diffuse late tail, returning seven band responses independently. It normalizes each source/receiver pair to its direct path, uses temperature for a dry-air sound-speed approximation, and reports Sabine/Eyring checks, ideal modal frequencies, and per-receiver power sums for independent sources. The diffuse tail's integrated energy uses the diffuse-field estimate `R/D ~= 16 pi r^2/A` and the Eyring decay where available; its noise samples do not claim directional ray simulation.
+The CLI calls `earnest.engine.RoomSpec` for validation and `solve_room()` for computation. The engine separates room/material input (`engine/room.py`), rectangular image paths (`engine/shoebox.py`), solve orchestration/results (`engine/solve.py`), and audio driving (`engine/render.py`). `room-solve` writes per-band WAV IRs and a `solution.json` manifest. `simulate` solves a room, convolves each input source through its source-to-receiver responses, writes the resulting audio with its decay tail, and saves output level/band analysis. The current renderer sums specular path impulses and a statistical diffuse late tail, returning seven band responses independently. It normalizes each source/receiver pair to its direct path, uses temperature for a dry-air sound-speed approximation, and reports Sabine/Eyring checks, ideal modal frequencies, and per-receiver power sums for independent sources. The diffuse tail's integrated energy uses the diffuse-field estimate `R/D ~= 16 pi r^2/(A + 4mV)` when air is enabled and the Eyring decay where available; its noise samples do not claim directional ray simulation.
 
 Scattering reduces the specular share in the current path model, while a global energy estimate fills a statistical late tail. This does not predict directional redistribution of scattered energy. The engine also does not yet fit measured IRs, render low-frequency modal pressure responses, combine bands into phase-aligned full-band IRs, include correlated-source cross terms in its default receiver summary, or compute arbitrary spatial grids. A separate explicit-path soundfield component now evaluates supplied correlated source spectra; it does not include the statistical tail.
 
@@ -262,3 +262,19 @@ independent sources.
 Example: `earnest room-solve room.json --out solve` followed by
 `earnest soundfield-spectrum examples/soundfield/independent-stereo.json --room-solution solve/solution.json --out field.json`
 when the room has `speaker_left` and `speaker_right` source IDs.
+
+
+## Air absorption in statistical room decay (November 2026)
+
+For ISO 9613-1 attenuation `alpha_air` in dB/m, the intensity decay coefficient
+`m = alpha_air ln(10)/10` in m^-1, and effective diffuse absorption area is
+`A_air = 4mV`. With `K = 24 ln(10)/c`, the updated estimates are
+`T_S = K V/(A + 4mV)` and `T_E = K V/(-S ln(1-A/S) + 4mV)`.
+The fitting routine uses the same denominator, including boundary cases where
+a target is unattainable. The diffuse-tail energy estimate uses `A + 4mV` as
+an approximation. Air loss is optional and defaults to disabled for existing
+rooms. An air-only room can have finite estimated decay even when all surface
+absorption is zero; no finite decay is reported when both loss mechanisms vanish.
+See [AFMG EASE, room acoustics calculation](https://www.afmg.eu/sites/default/files/2025-12/EASE_5-TE_UsersGuide.pdf)
+for the formula and coefficient convention. The estimates assume a diffuse field;
+they do not predict individual late paths or calibrated SPL.

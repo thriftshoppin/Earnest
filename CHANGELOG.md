@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added optional air absorption to Sabine/Eyring decay, decay fitting and the existing diffuse energy approximation, using the same `4mV` correction. Added equation, air-only and fit-consistency checks.
+
+## Local build 1102fb3 — 2026-11-03
+
 - Added cross-spectral propagation for multiple correlated sources and receivers, with Hermitian/positive-semidefinite validation and a CLI. An explicit-path adapter uses the existing room solution; it does not include the diffuse statistical tail or calibrated absolute SPL.
 - Corrected the equation sheet's IACC, source directivity, air attenuation, specular-scattering and cross-spectral convention descriptions.
 - Added equation and integration checks under `tests` and a small independent stereo source-spectrum example.

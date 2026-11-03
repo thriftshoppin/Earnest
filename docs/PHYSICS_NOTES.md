@@ -17,7 +17,7 @@ Sources: [ISO 9613-1:1993, sections 5–7](https://cdn.standards.iteh.ai/samples
 
 Enable it per room with `environment.air_absorption_enabled: true`, alongside `temperature_c`, `humidity_percent`, and `pressure_pa`. Existing documents default to disabled, preserving their previous output. Temperature is restricted to -20 to 50 °C when enabled; relative humidity 0–100%; pressure 10–200 kPa. Those input bounds do not imply uniform accuracy: the standard's stated uncertainty varies with frequency, pressure, temperature and molar concentration. Humidity is relative to saturation over liquid water.
 
-Air attenuation multiplies each explicit image-source pressure path at the octave center. The current solver normalizes each pair to the corresponding omnidirectional direct path; therefore the direct-path air loss is normalized out and reflections retain relative loss compared with that path. The statistical late tail and Sabine/Eyring RT estimates do **not** yet include air absorption, and sound speed remains the existing dry-air temperature approximation. Octave-center treatment does not integrate a broadband source spectrum.
+Air attenuation multiplies each explicit image-source pressure path at the octave center. The current solver normalizes each pair to the corresponding omnidirectional direct path; therefore the direct-path air loss is normalized out and reflections retain relative loss compared with that path. The Sabine/Eyring decay estimates and the diffuse-energy approximation also include air absorption through the equivalent area `4mV` described below. Sound speed remains the existing dry-air temperature approximation. Octave-center treatment does not integrate a broadband source spectrum.
 
 ## Directional sources and receivers
 
@@ -133,3 +133,24 @@ sound-field rendering, or direct application of rooms to Frankenjack.
 ## Correlated sources
 
 See the implemented correlated-source spectral propagation section in [the equation sheet](ROOM_SOLVER_MATH.md). The standalone calculation uses supplied complex transfer and source cross-spectral matrices; the room adapter uses coherent explicit image paths and excludes the statistical late field. Tests cover direct-distance scaling, phase, cancellation, constructive addition, and invalid cross-spectral matrices.
+
+## Air absorption in statistical decay and fitting
+
+With air absorption enabled, `alpha_air` is the ISO 9613-1 attenuation in dB/m.
+For sound-energy attenuation, `m = alpha_air ln(10)/10` in inverse meters and
+`A_air = 4 m V` in square meters. Each octave estimate uses
+
+```
+K = 24 ln(10) / c
+T_Sabine = K V / (A_surface + A_air)
+T_Eyring = K V / (-S ln(1 - A_surface/S) + A_air)
+```
+
+The same air term is used when fitting measured decay and in the solver's
+existing diffuse-field energy estimate. See the [AFMG EASE documentation](https://www.afmg.eu/sites/default/files/2025-12/EASE_5-TE_UsersGuide.pdf)
+for the Eyring expression and unit conversion. These statistical models still
+assume an approximate diffuse field; they are not spatial simulations, and the
+resulting decay depends on the ISO model's environmental validity. The diffuse
+energy target remains an approximation, the late tail remains stochastic, and
+source/receiver directionality is not modeled in that tail. With air disabled,
+previous decay and fitting behavior is preserved.

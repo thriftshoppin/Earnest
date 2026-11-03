@@ -36,6 +36,7 @@ def _late_field(room: RoomSpec, band_index: int, direct_distance: float, reflect
     areas = room.wall_areas()
     absorption_area = sum(areas[w] * room.absorption(w, band_index)
                           for w in room.surfaces)
+    absorption_area += room.air_absorption_area_m2(band_index)
     if absorption_area <= 0 or rt60 is None or rt60 <= 0:
         return np.zeros(0, dtype=np.float64), {"start_s": None, "rt60_s": rt60,
                                                "target_reverb_to_direct_energy": None,
@@ -168,6 +169,6 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
             "Band impulse responses are separate and are not phase-calibrated into a full-band waveform.",
             "Low-frequency modal frequencies are not synthesized; correlated-source cross terms are not included.",
             "Pressure gains are normalized to each source-receiver direct path; absolute SPL needs source and calibration data.",
-            "When enabled, air absorption and ideal frequency-independent directivity affect explicit paths only; the statistical late tail and RT60 do not model these effects. Humidity effects on sound speed are not modeled. Measured RT60 fitting does not recover unique geometry or materials."
+            "When enabled, air absorption affects explicit paths and diffuse-field decay estimates; ideal frequency-independent directivity affects explicit paths only. Humidity effects on sound speed are not modeled. Measured RT60 fitting does not recover unique geometry or materials."
         ]
     }
