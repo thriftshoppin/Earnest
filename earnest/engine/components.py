@@ -82,6 +82,22 @@ class FrequencyTraceComponent:
                  source=context.inputs["audio.samples"].source, notes=tuple(result["limits"]))}
 
 
+class InstrumentIdentificationComponent:
+    name = "instrument.identify"
+    requires = ("audio.samples", "instrument.reference_model")
+    provides = ("instrument.identification",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .instrument_id import identify
+        audio = context.inputs["audio.samples"].value
+        try:
+            result = identify(audio["samples"], audio["sample_rate_hz"], context.inputs["instrument.reference_model"].value)
+        except (TypeError, KeyError, ValueError) as exc:
+            raise EngineError("instrument.identify: %s" % exc) from exc
+        return {"instrument.identification": Artifact(result["schema"], result,
+                source=context.inputs["audio.samples"].source, notes=tuple(result["notes"]))}
+
+
 class InstrumentModesComponent:
     """Ideal resonator modes; instrument body and excitation are not inferred."""
     name = "instrument.modes"
@@ -372,7 +388,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), InstrumentIdentificationComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

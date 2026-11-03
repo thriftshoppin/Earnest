@@ -73,3 +73,33 @@ are zero padded and marked with `valid_samples`; their levels are not calibrated
 as full-window measurements. The current implementation reads the full input and
 holds the result in memory, so long recordings and small hops can be expensive.
 It does not play audio.
+
+## Experimental instrument reference classifier
+
+`earnest instrument-train examples --out model.json` learns a reference library
+from immediate subfolders, each named for a label, e.g. `acoustic_guitar`,
+`synthetic_lead`, `acoustic_percussion`, `electronic_kick`, or `cymbal`. It accepts
+WAV, FLAC, Ogg and MP3 as supported by the installed libsndfile. Model JSON stores
+per-file feature vectors, source paths, and SHA-256 hashes. To inspect a sample,
+run `earnest instrument-identify recording.mp3 --model model.json`. The same
+operation is the `instrument.identify` engine component.
+
+This is a baseline supervised nearest-reference method, not a pretrained neural
+network. It ranks one closest example per label using standardized log-frequency
+spectral DCT statistics; distance is not a probability. The first 15 seconds are
+used and stereo is averaged to mono; phase cancellation can lose content. It has
+no source separation, event timing, out-of-distribution rejection, dedicated
+percussion transient model, or reliable full-song recognition. It always ranks
+known classes even when none match. The automated checks use synthetic signals
+and do not establish real instrument accuracy. Train and independently evaluate
+on varied recordings, with separate instruments and sessions in each split.
+
+NSynth recordings by Google Inc. are available under [CC BY 4.0](https://magenta.withgoogle.com/datasets/nsynth).
+The [Strudel MP3 conversion](https://huggingface.co/datasets/vvolhejn/nsynth)
+contains acoustic, electronic, and synthetic families. Dataset note samples alone
+do not cover modern drum kits or a representative range of electronic percussion.
+Retain source, creator, license and any edits for each sample; check licenses before
+redistribution. The current room solver accepts arbitrary source positions and
+ideal omni, cardioid and figure-eight patterns, which can represent simplified
+stage speakers, but it has no measured loudspeaker directivity, frequency response,
+crossover, cabinet, amplifier, or subwoofer-array model.

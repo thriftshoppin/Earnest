@@ -287,6 +287,40 @@ def cmd_instrument_modes(a):
     return 0
 
 
+def cmd_instrument_train(a):
+    from .engine.instrument_id import train
+    try:
+        out = Path(a.out)
+        if out.exists():
+            raise ValueError("output already exists; choose a new path")
+        model = train(a.examples)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("x", encoding="utf-8") as f:
+            json.dump(model, f, indent=2, allow_nan=False)
+        print("trained on %d labeled recordings -> %s" % (len(model["samples"]), out))
+    except (OSError, ValueError, RuntimeError) as exc:
+        raise SystemExit("instrument-train: %s" % exc)
+    return 0
+
+
+def cmd_instrument_identify(a):
+    import soundfile as sf
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        model = json.loads(Path(a.model).read_text(encoding="utf-8-sig"))
+        with sf.SoundFile(a.audio) as source:
+            fs = source.samplerate
+            samples = source.read(frames=fs * 15, dtype="float64", always_2d=True)
+        result = create_engine().execute(("instrument.identify",), {
+            "audio.samples": Artifact("earnest.audio-samples.v1", {"samples": samples, "sample_rate_hz": int(fs)}, source=str(Path(a.audio).resolve())),
+            "instrument.reference_model": Artifact("earnest.instrument-reference-model.v1", model, source=str(Path(a.model).resolve()))
+        }).artifacts["instrument.identification"].value
+        print(json.dumps(result, indent=2, allow_nan=False))
+    except (OSError, ValueError, TypeError, EngineError, RuntimeError) as exc:
+        raise SystemExit("instrument-identify: %s" % exc)
+    return 0
+
+
 def cmd_frequency_trace(a):
     import soundfile as sf
     from .engine import Artifact, EngineError, create_engine
@@ -934,6 +968,14 @@ def main(argv=None):
     instrument = sub.add_parser("instrument-modes", help="compute ideal string or pipe resonator modes from a JSON model")
     instrument.add_argument("model", help="instrument model JSON file")
     instrument.set_defaults(fn=cmd_instrument_modes)
+    inst_train = sub.add_parser("instrument-train", help="train experimental instrument reference model from labeled folders")
+    inst_train.add_argument("examples", help="directory containing one folder per instrument label")
+    inst_train.add_argument("--out", required=True, help="new model JSON file")
+    inst_train.set_defaults(fn=cmd_instrument_train)
+    inst_identify = sub.add_parser("instrument-identify", help="rank instrument reference matches for an isolated recording")
+    inst_identify.add_argument("audio")
+    inst_identify.add_argument("--model", required=True)
+    inst_identify.set_defaults(fn=cmd_instrument_identify)
     frequency = sub.add_parser("frequency-trace", help="transcribe time-stamped spectral peaks from an audio file")
     frequency.add_argument("audio")
     frequency.add_argument("--out", help="new JSON output file")
