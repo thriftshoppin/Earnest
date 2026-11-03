@@ -39,3 +39,13 @@ the optional Demucs backend is installed. The folder opens when it finishes.
 Clips remain in the temporary Earnest-Demos folder until removed. This is not a
 continuous separator and does not yet provide independent instrument faders.
 
+
+FULL ONE-PASS SETUP
+Run Update-Earnest-VM-Full.cmd after extracting this complete folder. It updates
+the app, then downloads and installs uv if needed, the Demucs and Basic Pitch
+runtimes, and the Demucs model. Internet and several GB of free disk space are
+required. Progress and any errors remain visible. After success, launch
+%USERPROFILE%\tools\Earnest-VM-Lab\app\Frankenjack.cmd.
+
+VMware Workstation CUDA access is not set up by this installer. The CUDA host
+worker/guest bridge and live instrument separation are not implemented.

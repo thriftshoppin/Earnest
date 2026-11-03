@@ -2,6 +2,10 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — Cumulative VM update launcher
+
+- Added a full update launcher that applies the application payload, installs isolated Demucs and Basic Pitch runtimes through uv, and downloads the Demucs model. It requires network access and several GB of guest disk space. Added an app-local Frankenjack launcher and included CUDA documentation in the update. The application payload and full-update success and failure paths were checked with mock components; the full model download has not yet been verified in the VM.
+
 ## Unreleased — CUDA rendering foundation
 
 - Added an optional CUDA backend for the offline room renderer's seven-band frequency partition and FFT convolution, explicit GPU index selection, CUDA device discovery and simulation provenance. The solver, statistics, other analyses and live audio bridge remain CPU-based.

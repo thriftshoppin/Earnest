@@ -9,6 +9,30 @@ from pathlib import Path
 
 @unittest.skipUnless(os.name == 'nt', 'Windows VM updater')
 class VMUpdateTests(unittest.TestCase):
+    def test_full_update_orchestrates_models_and_reports_failures(self):
+        repo=Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp); package=root/'package'; package.mkdir(); install=root/'install'; app=install/'app'
+            full=package/'Update-Earnest-VM-Full.ps1'; full.write_bytes((repo/'lab/vm/Update-Earnest-VM-Full.ps1').read_bytes())
+            (package/'Update-Earnest-VM.ps1').write_text('param([string]$InstallDirectory)\nexit 0\n')
+            compiler=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+            source=root/'stub.cs'; source.write_text('class P { static int Main() { return 0; } }')
+            stub=root/'stub.exe'; built=subprocess.run([str(compiler),'/nologo',f'/out:{stub}',str(source)],capture_output=True,text=True)
+            self.assertEqual(built.returncode,0,built.stdout+built.stderr)
+            (root/'uv.exe').write_bytes(stub.read_bytes())
+            (app/'bin').mkdir(parents=True)
+            for name,folder,exe in [('setup-separation.ps1','demucs','demucs.exe'),('setup-transcription.ps1','basic-pitch','basic-pitch.exe')]:
+                (app/'bin'/name).write_text(f"$p=Join-Path $PSScriptRoot '..\\runs\\runtime\\{folder}\\Scripts'\nNew-Item -ItemType Directory -Force -Path $p | Out-Null\nCopy-Item -LiteralPath $env:EARNEST_TEST_STUB -Destination (Join-Path $p 'python.exe')\nCopy-Item -LiteralPath $env:EARNEST_TEST_STUB -Destination (Join-Path $p '{exe}')\n")
+            env=os.environ.copy(); env['PATH']=str(root)+os.pathsep+env['PATH']; env['EARNEST_TEST_STUB']=str(stub)
+            cmd=['powershell','-NoProfile','-ExecutionPolicy','Bypass','-File',str(full),'-InstallDirectory',str(install)]
+            result=subprocess.run(cmd,capture_output=True,text=True,env=env)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertIn('Full application and model-runtime update completed',result.stdout)
+            (app/'bin/setup-separation.ps1').write_text('exit 9\n')
+            result=subprocess.run(cmd,capture_output=True,text=True,env=env)
+            self.assertNotEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertIn('Demucs setup failed',result.stdout)
+
     def test_update_backup_preserve_and_reject_corruption(self):
         script=Path(__file__).resolve().parents[1]/'lab/vm/Update-Earnest-VM.ps1'
         with tempfile.TemporaryDirectory() as tmp:

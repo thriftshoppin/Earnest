@@ -29,14 +29,23 @@ Copy-Item -Path (Join-Path $build '*') -Destination (Join-Path $app 'stagejack')
 Copy-Item -LiteralPath (Join-Path $build 'EarnestAudioHost-eq.exe') -Destination (Join-Path $app 'earnest\audio\native\EarnestAudioHost-eq.exe')
 Copy-Item -LiteralPath (Join-Path $repo 'requirements-basic-pitch.txt') -Destination $app
 Copy-Item -LiteralPath (Join-Path $repo 'requirements-demucs.txt') -Destination $app
+$frankenjackLauncher = @'
+@echo off
+setlocal
+set "EARNEST_HOME=%~dp0"
+set "PATH=%~dp0..\python;%~dp0..\node;%PATH%"
+cd /d "%~dp0"
+start "" "%~dp0stagejack\StageJack-Earnest.exe"
+'@
+[IO.File]::WriteAllText((Join-Path $app 'Frankenjack.cmd'), ($frankenjackLauncher -replace "`r?`n", "`r`n") + "`r`n", [Text.Encoding]::ASCII)
 $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {
   [ordered]@{path=$_.FullName.Substring($payload.Length+1); sha256=(Get-Sha256 $_.FullName)}
 })
 [ordered]@{schema='earnest.vm-update.v1'; files=$files} | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $out 'manifest.json') -Encoding UTF8
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Update-Earnest-VM.cmd'),(Join-Path $PSScriptRoot 'Update-Earnest-VM.ps1'),(Join-Path $PSScriptRoot 'VM-UPGRADE-README.txt'),(Join-Path $PSScriptRoot 'VM-UPGRADE.md') -Destination $out
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Update-Earnest-VM.cmd'),(Join-Path $PSScriptRoot 'Update-Earnest-VM.ps1'),(Join-Path $PSScriptRoot 'Update-Earnest-VM-Full.cmd'),(Join-Path $PSScriptRoot 'Update-Earnest-VM-Full.ps1'),(Join-Path $PSScriptRoot 'VM-UPGRADE-README.txt'),(Join-Path $PSScriptRoot 'VM-UPGRADE.md') -Destination $out
 $documentation = Join-Path $out 'documentation'
 New-Item -ItemType Directory -Path $documentation | Out-Null
-foreach ($name in @('BUILD_NOTES_NOV_03.md','ROOM_SOLVER_MATH.md','PHYSICS_NOTES.md','ROADMAP.md','CLI_COMMAND_TRANSLATION.md','ENGINE_ARCHITECTURE.md','SUITE_UPDATES_PLAN.md','HYPOTHESIS_EVALUATION.md','EFFECT_PURSUIT.md')) {
+foreach ($name in @('BUILD_NOTES_NOV_03.md','ROOM_SOLVER_MATH.md','PHYSICS_NOTES.md','ROADMAP.md','CLI_COMMAND_TRANSLATION.md','ENGINE_ARCHITECTURE.md','SUITE_UPDATES_PLAN.md','HYPOTHESIS_EVALUATION.md','EFFECT_PURSUIT.md','CUDA_BACKEND.md')) {
   Copy-Item -LiteralPath (Join-Path $repo ('docs\' + $name)) -Destination $documentation
 }
 Copy-Item -LiteralPath (Join-Path $repo 'CHANGELOG.md') -Destination $documentation
