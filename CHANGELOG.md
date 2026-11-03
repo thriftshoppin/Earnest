@@ -4,6 +4,11 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added file-based decay, late-tail energy, and tail-duration CLI commands with independent baseline scaling, explicit extended range, and overwrite protection.
+- Documented a research comparison with Pyroomacoustics and a possible measured-scene evaluation; this is not a validation result.
+
+## Local build 4f57715 — 2026-11-03
+
 - Wired the Stage Width control to a smoothed, unity-by-default stereo mid/side stage independent of the room, with offline mono, unity and widened checks. Other spatial positioning controls remain unwired.
 
 ## Local build e877184 — 2026-11-03

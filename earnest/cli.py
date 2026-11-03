@@ -265,6 +265,39 @@ def cmd_room_template(a):
     return 0
 
 
+def cmd_set_room_percentage(a):
+    """Write a new room with one control scaled from the supplied baseline."""
+    from .engine.room import RoomSpec
+    import math
+    controls = {"set-decay": ("decay_scale", 0.1),
+                "set-tail": ("diffuse_energy_scale", 0.0),
+                "set-tail-duration": ("tail_duration_scale", 0.1)}
+    field, default_min = controls[a.cmd]
+    try:
+        if not math.isfinite(a.percent) or not 0 <= a.percent <= (250 if a.force else 100):
+            raise ValueError("percentage must be 0–100, or 0–250 with -f")
+        source = Path(a.room_file)
+        destination = Path(a.out)
+        raw = json.loads(source.read_text(encoding="utf-8-sig"))
+        baseline = RoomSpec.from_dict(raw)
+        value = getattr(baseline.controls, field) * a.percent / 100.0
+        if value < default_min:
+            raise ValueError("resulting %s must be at least %s" % (field, default_min))
+        raw.setdefault("engine_controls", {})[field] = value
+        RoomSpec.from_dict(raw)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("x", encoding="utf-8", newline="\n") as stream:
+            json.dump(raw, stream, indent=2)
+            stream.write("\n")
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise SystemExit("%s: %s" % (a.cmd, exc))
+    print("%s: %g%% of baseline -> %s = %g; wrote %s" %
+          (a.cmd, a.percent, field, value, destination.resolve()))
+    if a.cmd == "set-tail-duration":
+        print("Tail rendering is limited to 0.25–8 seconds by the solver.")
+    return 0
+
+
 def cmd_room_field(a):
     from .engine import Artifact, EngineError, create_engine
     try:
@@ -950,6 +983,15 @@ def cmd_spatial_render(a):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="earnest", description="Analyze, configure, solve, and audition modeled acoustic rooms.")
     sub = p.add_subparsers(dest="cmd", required=True)
+    for name, description in (("set-decay", "scale room decay time"),
+                              ("set-tail", "scale late-field energy"),
+                              ("set-tail-duration", "scale the rendered tail duration")):
+        dial = sub.add_parser(name, help=description + " relative to a baseline room")
+        dial.add_argument("room_file", help="baseline room JSON; it is not modified")
+        dial.add_argument("percent", type=float, help="percentage of baseline (normally 0–100)")
+        dial.add_argument("--out", required=True, help="new room JSON to write")
+        dial.add_argument("-f", "--force", action="store_true", help="allow percentages up to 250")
+        dial.set_defaults(fn=cmd_set_room_percentage)
     g = sub.add_parser("gen", help="write test-signal WAV files")
     g.add_argument("--out", help="output folder (default: a new run folder)")
     g.add_argument("--suite", choices=["lite", "full"], help="write ONE probe-suite WAV with every stimulus joined (plus its manifest) instead of the separate files")

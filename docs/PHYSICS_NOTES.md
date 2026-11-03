@@ -2,6 +2,10 @@
 
 This is a research foundation, not a claim that every instrument or room is physically solved. Recorded instruments, voices, microphones, nonlinear effects, source positions, materials and a room's geometry cannot in general be uniquely recovered from a stereo mix. Each model below states what it computes and what it leaves out.
 
+## Comparison to other room engines
+
+[Pyroomacoustics' room simulation documentation](https://pyroomacoustics.readthedocs.io/en/stable/pyroomacoustics.room.html) describes an image-source model and an experimental hybrid image-source/ray-tracing simulator; its [changelog](https://pyroomacoustics.readthedocs.io/en/stable/changelog.html) describes wall scattering through ray tracing. Earnest currently models rectangular rooms with explicit image paths and a statistical diffuse late tail. It does not trace rays through arbitrary room meshes. This suggests a future matched-scene comparison of arrival times, band decay and computation cost, with measured responses as an external reference. Differences alone would not establish which tool is correct; both have assumptions and approximation limits.
+
 ## Air attenuation on explicit paths
 
 `earnest.engine.physics.air_absorption_db_per_m` implements the ISO 9613-1 pure-tone atmospheric absorption model using temperature, relative humidity and pressure. Let `T` be kelvins, `T0 = 293.15 K`, `p0 = 101325 Pa`, `r = p/p0`, and `h` the water-vapour molar concentration in percent. The implementation computes saturation pressure using the ISO/ECMA expression, then oxygen and nitrogen relaxation frequencies `fO`, `fN`. The coefficient is

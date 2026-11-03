@@ -1,6 +1,16 @@
 # Earnest command language: equation controls and output
 
-**Status: mixed implementation and UX proposal.** `detect <input>` and `room-solve-from-analysis <room> <analysis>` are implemented. The interactive room session, guided room creation/editing, master-dial translations, live output selection and refresh behavior below remain proposals. The goal is to let a person adjust the same master controls that the room engine and future StageJack adapter use, without typing internal JSON paths or equation names.
+**Status: mixed implementation and UX proposal.** `detect`, `room-solve-from-analysis`, and the three file-based room percentage commands described below are implemented. The interactive room session, guided room creation/editing, live output selection and refresh behavior remain proposals.
+
+### Implemented room percentage commands
+
+```text
+earnest set-decay baseline.room.json 150 -f --out longer.room.json
+earnest set-tail baseline.room.json 80 --out quieter-tail.room.json
+earnest set-tail-duration baseline.room.json 80 --out shorter-file.room.json
+```
+
+Each command multiplies the corresponding value in the supplied baseline and writes a new room file; it refuses to overwrite an existing destination. Use the same baseline each time for repeatable settings. Decay and tail duration must produce a scale of at least 0.1; tail energy can be zero. The resulting room must satisfy the existing schema, including its limits. These commands save settings for a later solve/render; they do not refresh a running bridge. Tail duration is also subject to the solver's 0.25–8 second cap.
 
 ## Session shape
 
@@ -77,7 +87,7 @@ The interactive CLI needs to cover every value that changes the room solve, not 
 | `set-material <surface> <material>` | Six surfaces: `x-min`, `x-max`, `y-min`, `y-max`, `floor`, `ceiling`; named material from room library | Which frequency-dependent absorption/scattering coefficients each surface uses | `surfaces.*.material_id`; existing. |
 | `set-absorption <band|all> <P> [-f]` | Percent multiplier, normally 0–100%, forced up to 250%; band centers 125–8000 Hz | Scales the material absorption used in that octave band, changing Sabine/Eyring decay and reflected energy | `engine_controls.absorption_scale[band]`; existing, current schema range 0–20x. Enforce physical effective absorption <= 1 and explain when a surface saturates. |
 | `set-scattering <band|all> <P> [-f]` | Same percentage convention and seven octave bands | Scales scattering, changing the specular/diffuse energy split | `engine_controls.scattering_scale[band]`; existing, current schema range 0–20x. Effective scattering is bounded by 1. |
-| `set-decay <P> [-f]` | Normally 0–100%; forced through 250% | Scales all predicted octave-band RT60 values together, preserving the relative band shape | Proposed `decay_scale` master parameter; new. Uses current selected Sabine/Eyring baseline. |
+| `set-decay <P> [-f]` | Normally 0–100%; forced through 250% | Scales all predicted octave-band RT60 values together, preserving the relative band shape | `decay_scale` is implemented and uses the selected Sabine/Eyring baseline. The interactive session remains proposed. |
 | `set-decay-model <eyring|sabine>` | `eyring`, `sabine` | Selects which existing equation estimates late-field RT60 | `engine_controls.decay_model`; existing. |
 | `set-tail <P> [-f]` | Normally 0–100%; forced through 250% | Scales late-field energy, as perceived tail strength / wet energy, without changing RT60 | Maps to `engine_controls.diffuse_energy_scale`; existing (0–10x). **Corrected proposal:** keep render duration as its own dial, since “tail” in this control UX is tail amount, not file length. |
 | `set-tail-duration <P> [-f]` | Normally 0–100%; forced through 250%; cannot be less than engine's minimum | Scales how long the renderer allocates for the decay | `engine_controls.tail_duration_scale`; existing. Current solver clamps generated duration to 0.25–8 seconds; show truncation/cap clearly. |
