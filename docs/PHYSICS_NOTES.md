@@ -35,7 +35,7 @@ The component `instrument.modes` accepts a versioned `instrument.model` artifact
 - Pinned stiff string: `f_n = n/(2L) sqrt(T/mu) sqrt(1 + B n^2)` with dimensionless inharmonicity `B >= 0`. The flexible-string base frequency is not the actual first partial when `B > 0`. This is a pinned-boundary approximation, not a general string model. See [Penn State's stiff-string discussion](https://www.acs.psu.edu/drussell/Demos/Stiffness-Inharmonicity/Stiffness-B.html).
 - Fixed-edge circular membrane: `f_mn = j_mn/(2 pi a) sqrt(T_s/mu_s)`, where `j_mn` is the nth positive zero of Bessel function `J_m`, radius `a` is in meters, membrane tension `T_s` N/m, and surface density `mu_s` kg/m². Positive angular orders have two orientation-degenerate modes, reported once. See [University of Arizona's circular membrane description](https://math.arizona.edu/~lega/322/Spring07/cem.html).
 
-All `n` start at one. Tube `L_eff` must already include the appropriate end correction; this model does not infer that correction. These idealized resonances do not model strings' bending stiffness, soundboards, reeds, vocal folds, instrument-specific radiation, nonlinear excitation, transients, damping or coupling to a room. They do not identify an instrument from audio or render an instrument. See [Carnegie Mellon musical acoustics](https://www.cs.cmu.edu/~15322/book/ch12/00.html) and [University of Massachusetts string waves](https://openbooks.library.umass.edu/physicsofmusic/chapter/lab-activity-5/).
+All `n` start at one. Tube `L_eff` must already include the appropriate end correction; this model does not infer that correction. Except for the optional pinned stiff-string approximation, these idealized resonances do not model bending stiffness; they also omit soundboards, reeds, vocal folds, instrument-specific radiation, nonlinear excitation, transients, damping or coupling to a room. They do not identify an instrument from audio or render an instrument. See [Carnegie Mellon musical acoustics](https://www.cs.cmu.edu/~15322/book/ch12/00.html) and [University of Massachusetts string waves](https://openbooks.library.umass.edu/physicsofmusic/chapter/lab-activity-5/).
 
 ## Room Studio
 
@@ -129,3 +129,7 @@ unrecognized metadata; it is not an executable shell script. Room Studio is a
 plain JavaScript/canvas UI backed by the existing local Python solver. It does
 not yet support freeform walls, arbitrary geometry, dragging height, real-time
 sound-field rendering, or direct application of rooms to Frankenjack.
+
+## Correlated sources
+
+See the implemented correlated-source spectral propagation section in [the equation sheet](ROOM_SOLVER_MATH.md). The standalone calculation uses supplied complex transfer and source cross-spectral matrices; the room adapter uses coherent explicit image paths and excludes the statistical late field. Tests cover direct-distance scaling, phase, cancellation, constructive addition, and invalid cross-spectral matrices.

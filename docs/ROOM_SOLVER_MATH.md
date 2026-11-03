@@ -37,7 +37,7 @@ Unless specified otherwise, Earnest uses SI-like seconds and Hz internally, a no
 - Regularized deconvolution: `H(f)=X*(f)Y(f)/(|X(f)|^2 + epsilon_X)`, where `epsilon_X=10^-4 max_f |X(f)|^2`; `h=IFFT(H)`. Negative-lag samples are retained up to 2 seconds to estimate alignment. This assumes a sufficiently linear, time-invariant path and a usable excitation spectrum.
 - Moving smoothing: `smooth(e,n)[k]` is the centered moving mean over `n` points.
 - Decay estimation: estimate noise `N` as mean energy in the last 10% of the sequence, floor subtract `e_2=max(e-N,0)`, smooth over 5 ms, truncate when smoothed energy falls below `max(2N, 10^-9 peak)`, then `EDC[k]=sum_{u>=k}e_2[u]`. Normalize as `EDC_dB=10log10(EDC[k]/EDC[0])`. Fit a line over -5 to -25 dB for T20, -5 to -35 dB for T30, and 0 to -10 dB for EDT. For fitted slope `m` in dB/s, extrapolated `RT60=-60/m`. These are estimates from the observed IR, not guaranteed room reverberation times; noise-floor subtraction and fit range affect them.
-- IACC-like stereo similarity: `max_{|tau|<=1ms} sum_t a(t)b(t+tau) / sqrt(sum a^2 sum b^2)`. The implementation takes the maximum signed correlation, not maximum absolute correlation.
+- IACC-like stereo similarity: `max_{|tau|<=1ms} sum_t a(t)b(t+tau) / sqrt(sum a^2 sum b^2)`. The implementation takes the maximum absolute correlation across the permitted lags.
 - True peak estimate: maximum absolute sample after 4x polyphase resampling.
 
 ### IR extraction and room/effect metrics (`earnest/room.py`)
@@ -88,7 +88,7 @@ For surface `j` with area `S_j`, absorption coefficient `alpha_{j,b}` and scatte
 
 Require `0<=alpha<=1`, `0<=s<=1`. Of incident energy, absorption is `alpha`; reflected energy is `(1-alpha)`; its specular and diffuse portions are respectively `(1-alpha)(1-s)` and `(1-alpha)s`. At each interaction these fractions must sum to `alpha+(1-alpha)(1-s)+(1-alpha)s=1`. That conservation check prevents a solver from accidentally creating energy.
 
-As broad decay sanity checks, use Sabine `T60_b ~= 0.161 V/A_b` seconds (SI) in the diffuse-field/low-absorption regime, and Eyring `T60_b ~= 0.161 V / [-S ln(1-alpha_bar_b)]` as an alternative for more uniform absorption. These are global statistical estimates; neither determines where reflections occur or where energy is concentrated. Air attenuation can later be included as a distance-dependent term once its frequency/unit convention is fixed.
+As broad decay sanity checks, use Sabine `T60_b ~= 0.161 V/A_b` seconds (SI) in the diffuse-field/low-absorption regime, and Eyring `T60_b ~= 0.161 V / [-S ln(1-alpha_bar_b)]` as an alternative for more uniform absorption. These are global statistical estimates; neither determines where reflections occur or where energy is concentrated. ISO 9613-1 atmospheric attenuation can optionally affect explicit image paths; it is not included in these statistical decay estimates.
 
 ### 2. Propagation paths and early response
 
@@ -100,7 +100,7 @@ A proposed band pressure gain is:
 
 `g_{p,b} = D_s(p,b) D_r(p,b) / max(d_p,d_min) * product_j sqrt((1-alpha_{j,b}) * q_{j,p,b}) * exp(-m_b d_p)`
 
-where `D_s,D_r` are source/receiver directivity, `q=1` for specular reflection and `q=s` for a diffuse-scattering branch, and `m_b` is an optional atmospheric pressure attenuation coefficient. The square root converts the surface energy-retention fraction to pressure amplitude. `d_min` is a numerical/source-size regularizer; it must be explicit because the point-source `1/d` law is singular at zero distance. Calibration can provide the chosen reference-distance constant.
+where `D_s,D_r` are source/receiver directivity, `q=1-s` for the specular share and `q=s` for a diffuse-scattering branch, and `m_b` is an optional atmospheric pressure attenuation coefficient. The square root converts the surface energy-retention fraction to pressure amplitude. `d_min` is a numerical/source-size regularizer; it must be explicit because the point-source `1/d` law is singular at zero distance. Calibration can provide the chosen reference-distance constant.
 
 For early specular paths, sum pressure waveforms with their delays and polarity/phase: `h_early(r_r,r_s,t)=sum_p g_p delta(t-tau_p)` in the simplified band model. A real implementation needs fractional-delay filters and frequency-dependent gains. A shoebox image-source solver is a suitable first geometry backend; polygon visibility and diffraction need later work. An energy-only ray/radiosity pass can model the diffuse branches, but must not be mistaken for coherent phase prediction.
 
@@ -120,7 +120,7 @@ For mutually uncorrelated noise sources with power spectra `S_{x_i}(f)`, pressur
 
 `S_p(r,f)=sum_i |H_{r,i}(f)|^2 S_{x_i}(f)`.
 
-For correlated inputs with cross-spectral matrix `S_x(f)`, `S_p(r,f)=h_r(f)^H S_x(f) h_r(f)`. This is the core distinction between a room impulse response and “how noise exists in that room”: the room gives transfer functions; source count, spectra, positions, levels, and correlations determine the resulting sound field.
+With `S_x[i,j]=E[X_i conj(X_j)]` and a row transfer vector `h_r`, correlated inputs give `S_p(r,f)=h_r S_x(f) h_r^H`. This is the core distinction between a room impulse response and “how noise exists in that room”: the room gives transfer functions; source count, spectra, positions, levels, and correlations determine the resulting sound field.
 
 Spatial sampling can report energy per cell `D_b(cell)=sum_i integral_{cell} |p_{i,b}(r)|^2 dr`, normalized by cell volume for volumetric density. A directional spread metric can be entropy `H_b=-sum_k q_{k,b} ln(q_{k,b})`, with `q_k` the fraction of reflected energy arriving from direction bin `k`. These are proposed outputs; specify grid spacing and angular bins in the result so values are reproducible. With many incoherent sources, add their powers; with coherent sources, retain cross terms through `S_x`.
 
@@ -176,7 +176,7 @@ Start with a user-editable rectangular room: length, width, height; units; named
 }
 ```
 
-The `earnest.room.v1` rectangular schema is now accepted by the engine and can be generated with `earnest room-template room.json`. All six faces need a material assignment. The present solver uses source `level_db` by band and receiver position; directivity and receiver orientation are not used yet. A geometry import such as OBJ/glTF remains future work and needs an acoustic sidecar assigning surface materials and units; mesh geometry by itself contains no reliable absorption/scattering data. Measured WAV IR import should capture sample rate, channel mapping, calibration, source/receiver coordinates, and measurement provenance. One measured IR constrains that pair and placement; it cannot reconstruct an entire room.
+The `earnest.room.v1` rectangular schema is now accepted by the engine and can be generated with `earnest room-template room.json`. All six faces need a material assignment. The present solver uses source `level_db` by band and supports ideal source/receiver directivity and orientations on explicit paths; its statistical tail remains nondirectional. A geometry import such as OBJ/glTF remains future work and needs an acoustic sidecar assigning surface materials and units; mesh geometry by itself contains no reliable absorption/scattering data. Measured WAV IR import should capture sample rate, channel mapping, calibration, source/receiver coordinates, and measurement provenance. One measured IR constrains that pair and placement; it cannot reconstruct an entire room.
 
 ### Engine master controls and analysis-seeded rooms
 
@@ -210,7 +210,7 @@ For sample audio, the current trustworthy path is a matched dry source and wet r
 
 The CLI calls `earnest.engine.RoomSpec` for validation and `solve_room()` for computation. The engine separates room/material input (`engine/room.py`), rectangular image paths (`engine/shoebox.py`), solve orchestration/results (`engine/solve.py`), and audio driving (`engine/render.py`). `room-solve` writes per-band WAV IRs and a `solution.json` manifest. `simulate` solves a room, convolves each input source through its source-to-receiver responses, writes the resulting audio with its decay tail, and saves output level/band analysis. The current renderer sums specular path impulses and a statistical diffuse late tail, returning seven band responses independently. It normalizes each source/receiver pair to its direct path, uses temperature for a dry-air sound-speed approximation, and reports Sabine/Eyring checks, ideal modal frequencies, and per-receiver power sums for independent sources. The diffuse tail's integrated energy uses the diffuse-field estimate `R/D ~= 16 pi r^2/A` and the Eyring decay where available; its noise samples do not claim directional ray simulation.
 
-Scattering reduces the specular share in the current path model, while a global energy estimate fills a statistical late tail. This does not predict directional redistribution of scattered energy. The engine also does not yet fit measured IRs, render low-frequency modal pressure responses, combine bands into phase-aligned full-band IRs, model correlated sources, or compute arbitrary spatial grids.
+Scattering reduces the specular share in the current path model, while a global energy estimate fills a statistical late tail. This does not predict directional redistribution of scattered energy. The engine also does not yet fit measured IRs, render low-frequency modal pressure responses, combine bands into phase-aligned full-band IRs, include correlated-source cross terms in its default receiver summary, or compute arbitrary spatial grids. A separate explicit-path soundfield component now evaluates supplied correlated source spectra; it does not include the statistical tail.
 
 ### Proposed solver sequence
 
@@ -218,7 +218,7 @@ Scattering reduces the specular share in the current path model, while a global 
 2. (Implemented) Compute room volume/surface area and Sabine/Eyring estimates as sanity checks.
 3. (Implemented) Solve direct and specular paths with a shoebox image-source method and frequency-dependent surface losses.
 4. (Partial) Fill remaining reverberant energy with a statistical diffuse tail; directional scattering and a calibrated path-density transition remain future work.
-5. Generate a spatial grid response and source-weighted sound-field maps from transfer functions and source cross-spectra.
+5. (Partial) Propagate supplied cross-spectra through transfer matrices or modeled explicit paths. Spatial grids, statistical late-field coherence, and calibrated absolute levels remain open.
 6. If measurements exist, align/deconvolve using Earnest’s current IR workflow, fit parameters across positions/bands, and report uncertainty and residuals.
 7. (Partial) Export a versioned room solution with source-to-receiver band IRs and drive source audio through those responses. A phase-aligned full-band solution and adapter format for other tools remain future work.
 
@@ -236,3 +236,29 @@ Earnest already has a useful measurement layer: deconvolution, direct/tail separ
 - L. Visentin et al., “An experimental comparison of the performance of sound field diffusion models,” *JASA* (2012): [PubMed record](https://pubmed.ncbi.nlm.nih.gov/23145602/). Useful caution that diffusion approximations depend on room conditions.
 - “Sabine and Eyring revisited: Effect of room acoustics on measured absorption coefficients,” *JASA* (2022): [PubMed record](https://pubmed.ncbi.nlm.nih.gov/36050177/). Supports treating uncertain material coefficients and air absorption as calibration concerns rather than exact known inputs.
 
+
+
+## Implemented correlated-source spectral propagation (November 2026)
+
+For each frequency, define the source CSD matrix `Sx_ij = E[X_i conj(X_j)]` and
+the transfer matrix `H[r,i]`. The receiver CSD is `Sy = H Sx H^H` and receiver
+power spectral values are `Re Sy[r,r]`. Inputs must be Hermitian and positive
+semidefinite; values use `[real, imaginary]` pairs. Note that SciPy `csd(x,y)`
+uses `conj(X) Y`, the transposed convention for off-diagonal entries. See
+[SciPy CSD documentation](https://docs.scipy.org/doc/scipy/reference/generated/scipy.signal.csd.html)
+and the [University of Southampton acoustic cross-spectral matrix formulation](https://resource.isvr.soton.ac.uk/staff/pubs/PubPDFs/Pub1007.pdf).
+
+`soundfield.propagate` consumes explicit transfer matrices, while
+`soundfield.from_room_paths` forms `H[r,i](f) = sum_p g_p,b exp(-j 2 pi f tau_p)`
+from the room solution's explicit image paths, using the nearest octave center
+for `g_p,b`. Source levels are supplied in the source CSD, so the source
+`level_db` metadata must not also be assumed to have been applied. Unlike the
+room render's per-pair direct normalization, these path gains use `1/d` without
+a calibrated source factor; neither predicts absolute SPL without calibration.
+The statistical late tail is not included, and there is no frequency integration
+or arbitrary spatial grid. The default room-solve receiver summary still assumes
+independent sources.
+
+Example: `earnest room-solve room.json --out solve` followed by
+`earnest soundfield-spectrum examples/soundfield/independent-stereo.json --room-solution solve/solution.json --out field.json`
+when the room has `speaker_left` and `speaker_right` source IDs.

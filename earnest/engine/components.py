@@ -64,6 +64,36 @@ class RoomSolveComponent:
                                            source=room.schema, notes=tuple(solution["model_limits"]))}
 
 
+class RoomPathSoundFieldComponent:
+    name = "soundfield.from_room_paths"
+    requires = ("room.solution", "soundfield.source_spectra")
+    provides = ("soundfield.spectrum",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .soundfield import room_path_spectra
+        try:
+            result = room_path_spectra(context.inputs["room.solution"].value, context.inputs["soundfield.source_spectra"].value)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise EngineError("soundfield.from_room_paths: %s" % exc) from exc
+        return {"soundfield.spectrum": Artifact(result["schema"], result,
+                 source=context.inputs["room.solution"].source, notes=tuple(result["limits"]))}
+
+
+class SoundFieldSpectrumComponent:
+    name = "soundfield.propagate"
+    requires = ("soundfield.input",)
+    provides = ("soundfield.spectrum",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .soundfield import propagate_spectra
+        try:
+            result = propagate_spectra(context.inputs["soundfield.input"].value)
+        except (ValueError, TypeError) as exc:
+            raise EngineError("soundfield.propagate: %s" % exc) from exc
+        return {"soundfield.spectrum": Artifact(result["schema"], result,
+                 source=context.inputs["soundfield.input"].source, notes=tuple(result["limits"]))}
+
+
 class FrequencyTraceComponent:
     name = "audio.frequency_trace"
     requires = ("audio.samples",)
@@ -388,7 +418,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), InstrumentIdentificationComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

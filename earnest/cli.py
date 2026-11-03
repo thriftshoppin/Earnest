@@ -265,6 +265,35 @@ def cmd_room_template(a):
     return 0
 
 
+def cmd_soundfield_spectrum(a):
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        path = Path(a.input)
+        document = json.loads(path.read_text(encoding="utf-8-sig"))
+        if a.room_solution:
+            solution_path = Path(a.room_solution)
+            solution = json.loads(solution_path.read_text(encoding="utf-8-sig"))
+            workflow = ("soundfield.from_room_paths",)
+            inputs = {"room.solution": Artifact("earnest.room-solution.v1", solution, source=str(solution_path.resolve())),
+                      "soundfield.source_spectra": Artifact("earnest.source-spectra.v1", document, source=str(path.resolve()))}
+        else:
+            workflow = ("soundfield.propagate",)
+            inputs = {"soundfield.input": Artifact("earnest.soundfield-input.v1", document, source=str(path.resolve()))}
+        result = create_engine().execute(workflow, inputs).artifacts["soundfield.spectrum"].value
+        if a.out:
+            target = Path(a.out)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("x", encoding="utf-8") as stream:
+                json.dump(result, stream, indent=2, allow_nan=False)
+                stream.write("\n")
+            print("soundfield-spectrum: wrote %s" % target)
+        else:
+            print(json.dumps(result, indent=2, allow_nan=False))
+    except (OSError, ValueError, TypeError, EngineError) as exc:
+        raise SystemExit("soundfield-spectrum: %s" % exc)
+    return 0
+
+
 def cmd_room_from_instructions(a):
     from .room_instructions import apply_instructions
     try:
@@ -977,6 +1006,11 @@ def main(argv=None):
     rt = sub.add_parser("room-template", help="write a starter custom rectangular-room JSON file")
     rt.add_argument("file", help="destination room JSON; existing files are not overwritten")
     rt.set_defaults(fn=cmd_room_template)
+    field = sub.add_parser("soundfield-spectrum", help="propagate correlated source spectra through transfer matrices")
+    field.add_argument("input", help="earnest.soundfield-input.v1 JSON")
+    field.add_argument("--out", help="new output JSON (default: stdout)")
+    field.add_argument("--room-solution", help="room-solve solution.json; input must contain source spectra")
+    field.set_defaults(fn=cmd_soundfield_spectrum)
     instructions = sub.add_parser("room-from-instructions", help="build a room from a Room Studio instruction list")
     instructions.add_argument("instructions", help="earnest.room-instructions.v1 JSON file")
     instructions.add_argument("--out", required=True, help="new room JSON file")
