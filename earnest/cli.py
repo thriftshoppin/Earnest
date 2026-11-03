@@ -265,6 +265,30 @@ def cmd_room_template(a):
     return 0
 
 
+def cmd_room_field(a):
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        path = Path(a.room_file)
+        document = json.loads(path.read_text(encoding="utf-8-sig"))
+        run = create_engine().execute(("room.parse", "room.field_slice"),
+            {"room.document": Artifact("earnest.room.v1", document, source=str(path.resolve()))},
+            {"room.field_slice": {"frequency_hz": a.frequency, "grid_size": a.grid,
+                                  "height_m": a.height, "reflection_order": a.order}})
+        result = run.artifacts["room.field_slice"].value
+        if a.out:
+            target = Path(a.out)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with target.open("x", encoding="utf-8") as f:
+                json.dump(result, f, indent=2, allow_nan=False)
+                f.write("\n")
+            print("room-field: wrote %s" % target)
+        else:
+            print(json.dumps(result, indent=2, allow_nan=False))
+    except (OSError, ValueError, TypeError, EngineError) as exc:
+        raise SystemExit("room-field: %s" % exc)
+    return 0
+
+
 def cmd_soundfield_spectrum(a):
     from .engine import Artifact, EngineError, create_engine
     try:
@@ -1006,6 +1030,14 @@ def main(argv=None):
     rt = sub.add_parser("room-template", help="write a starter custom rectangular-room JSON file")
     rt.add_argument("file", help="destination room JSON; existing files are not overwritten")
     rt.set_defaults(fn=cmd_room_template)
+    field_slice = sub.add_parser("room-field", help="sample a relative explicit-path sound field in a room plane")
+    field_slice.add_argument("room_file")
+    field_slice.add_argument("--frequency", type=int, default=1000)
+    field_slice.add_argument("--grid", type=int, default=13)
+    field_slice.add_argument("--height", type=float)
+    field_slice.add_argument("--order", type=int, default=1)
+    field_slice.add_argument("--out", help="new JSON output file; default stdout")
+    field_slice.set_defaults(fn=cmd_room_field)
     field = sub.add_parser("soundfield-spectrum", help="propagate correlated source spectra through transfer matrices")
     field.add_argument("input", help="earnest.soundfield-input.v1 JSON")
     field.add_argument("--out", help="new output JSON (default: stdout)")

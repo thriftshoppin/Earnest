@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added an interactive, relative, single-frequency room-field slice and CLI export using coherent image paths within each source and independent powers across sources. The map is a limited point-sampled preview, not a measured SPL or late-field simulation.
+
+## Local build c773cd3 — 2026-11-03
+
 - Added finite-window C50, C80, D50 and center-time energy diagnostics per modeled source/listener band, with boundary and zero-energy checks.
 
 ## Local build 8a9f011 — 2026-11-03

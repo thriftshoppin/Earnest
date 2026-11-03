@@ -122,7 +122,7 @@ For mutually uncorrelated noise sources with power spectra `S_{x_i}(f)`, pressur
 
 With `S_x[i,j]=E[X_i conj(X_j)]` and a row transfer vector `h_r`, correlated inputs give `S_p(r,f)=h_r S_x(f) h_r^H`. This is the core distinction between a room impulse response and “how noise exists in that room”: the room gives transfer functions; source count, spectra, positions, levels, and correlations determine the resulting sound field.
 
-Spatial sampling can report energy per cell `D_b(cell)=sum_i integral_{cell} |p_{i,b}(r)|^2 dr`, normalized by cell volume for volumetric density. A directional spread metric can be entropy `H_b=-sum_k q_{k,b} ln(q_{k,b})`, with `q_k` the fraction of reflected energy arriving from direction bin `k`. These are proposed outputs; specify grid spacing and angular bins in the result so values are reproducible. With many incoherent sources, add their powers; with coherent sources, retain cross terms through `S_x`.
+A spatial-field slice is now implemented as documented below; it samples point values rather than integrating cell volume. A future spatial sampling system can report energy per cell `D_b(cell)=sum_i integral_{cell} |p_{i,b}(r)|^2 dr`, normalized by cell volume for volumetric density. A directional spread metric can be entropy `H_b=-sum_k q_{k,b} ln(q_{k,b})`, with `q_k` the fraction of reflected energy arriving from direction bin `k`. These are proposed outputs; specify grid spacing and angular bins in the result so values are reproducible. With many incoherent sources, add their powers; with coherent sources, retain cross terms through `S_x`.
 
 ### 5. Low-frequency behavior
 
@@ -298,3 +298,24 @@ they have no measured noise-floor correction, and they are not claims of
 ISO-compliant measurements. The solver may truncate long tails at eight seconds.
 See [Acoustical Society of America on C80](https://acoustics.org/pressroom/httpdocs/154th/paek.html)
 and [phonometry's room-acoustics implementation and equations](https://docs.jmrp.io/phonometry/reference/theory/rooms-buildings/).
+
+
+## Explicit-path room-field slice (November 2026)
+
+At a chosen octave center `f`, height `z`, and grid-cell center `r`, Earnest
+uses the image-path pressure gains and delays to compute
+`H_i(r,f) = sum_p g_(i,p,b) exp(-j 2 pi f tau_(i,p))` and the independent-source
+relative power `P(r,f) = sum_i |H_i|^2 10^(L_i,b/10)`. Each cell shows
+`10 log10(P/P_max)` with `P_max` taken over the sampled plane. The field component
+returns grid spacing and values; `earnest room-field room.json --frequency 1000
+--height 1.2 --grid 13 --order 1 --out field.json` exports them. Room Studio
+plots the same component, using 13 x 13 cells and zero or one reflection order.
+
+The map uses point samples, not an integral or volume density. Reflection paths
+within each source add coherently; different sources are treated as uncorrelated.
+The virtual receiver is omnidirectional, source directionality is included, and
+source band levels are used as relative weights. This is a single-frequency
+preview and can undersample rapid interference patterns. The statistical late
+tail, diffraction, source near field, source correlation and absolute SPL
+calibration are excluded. Samples within 0.1 m of a point source are omitted.
+The input reflection order and grid size are capped to keep the viewer responsive.

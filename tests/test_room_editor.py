@@ -67,6 +67,18 @@ class RoomEditorTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             apply_instructions(plan)
 
+    def test_field_api_uses_room_geometry(self):
+        room = json.loads(self.get('/api/template'))
+        field = self.post('/api/field', {'room': room, 'frequency_hz': 1000, 'grid_size': 3,
+                                       'height_m': 1.2, 'reflection_order': 0})
+        self.assertEqual(field['schema'], 'earnest.room-field-slice.v1')
+        self.assertEqual(field['grid_size'], 3)
+        self.assertEqual(len(field['relative_level_db']), 3)
+        with self.assertRaises(urllib.error.HTTPError) as error:
+            self.post('/api/field', {'room': room, 'grid_size': 50})
+        self.assertEqual(error.exception.code, 400)
+        error.exception.close()
+
     def test_invalid_room_and_cross_origin_are_rejected(self):
         room = json.loads(self.get('/api/template'))
         room['geometry']['dimensions'][0] = -1

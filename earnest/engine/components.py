@@ -64,6 +64,21 @@ class RoomSolveComponent:
                                            source=room.schema, notes=tuple(solution["model_limits"]))}
 
 
+class RoomFieldSliceComponent:
+    name = "room.field_slice"
+    requires = ("room.model",)
+    provides = ("room.field_slice",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .field_grid import sample_room_field
+        try:
+            result = sample_room_field(context.inputs["room.model"].value, **dict(context.options))
+        except (TypeError, ValueError) as exc:
+            raise EngineError("room.field_slice: %s" % exc) from exc
+        return {"room.field_slice": Artifact(result["schema"], result,
+                source=context.inputs["room.model"].source, notes=tuple(result["limits"]))}
+
+
 class RoomPathSoundFieldComponent:
     name = "soundfield.from_room_paths"
     requires = ("room.solution", "soundfield.source_spectra")
@@ -418,7 +433,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

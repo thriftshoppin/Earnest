@@ -128,7 +128,8 @@ existing output. The list includes the complete top-level fields, including
 unrecognized metadata; it is not an executable shell script. Room Studio is a
 plain JavaScript/canvas UI backed by the existing local Python solver. It does
 not yet support freeform walls, arbitrary geometry, dragging height, real-time
-sound-field rendering, or direct application of rooms to Frankenjack.
+sound-field rendering, or direct application of rooms to Frankenjack. A manually
+requested, static point-sampled sound-field slice is available as described below.
 
 ## Correlated sources
 
@@ -158,3 +159,14 @@ previous decay and fitting behavior is preserved.
 ## Modeled energy-time diagnostics
 
 Each source/receiver pair now includes C50, C80, D50 and center-time estimates by solver band, with explicit early and late energies. See the [equation sheet](ROOM_SOLVER_MATH.md) for definitions, sample boundaries, undefined values, and the distinction from measured room parameters.
+
+## Room-field slice
+
+Room Studio's **Map sound field** button uses `room.field_slice`, the same
+component available through `earnest room-field`. Select an octave center and
+height, then map again after editing the room. Colors show relative sampled
+power from -40 dB to the strongest sample; they do not show calibrated SPL.
+The map is calculated from direct and first-order image paths for independent
+sources, with an omnidirectional virtual receiver. It excludes the stochastic
+late tail and source correlations. See the [equation sheet](ROOM_SOLVER_MATH.md)
+for the equation and limitations.

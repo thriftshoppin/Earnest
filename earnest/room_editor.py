@@ -49,7 +49,7 @@ def create_server(port: int = 8775) -> ThreadingHTTPServer:
             if not self._valid_host() or self.headers.get("Origin", "").lower() not in (f"http://127.0.0.1:{actual_port}", f"http://localhost:{actual_port}"):
                 self.send_error(403)
                 return
-            if self.path not in ("/api/validate", "/api/solve", "/api/instructions"):
+            if self.path not in ("/api/validate", "/api/solve", "/api/instructions", "/api/field"):
                 self.send_error(404)
                 return
             try:
@@ -57,9 +57,15 @@ def create_server(port: int = 8775) -> ThreadingHTTPServer:
                 if not 1 <= length <= _MAX_BODY:
                     raise ValueError("room JSON must be between 1 byte and 1 MB")
                 document = json.loads(self.rfile.read(length))
-                room = RoomSpec.from_dict(document)
+                field_options = document if self.path == "/api/field" else None
+                room = RoomSpec.from_dict(document["room"] if field_options is not None else document)
                 result = {"valid": True, "volume_m3": room.volume_m3,
                           "decay_estimates": room.decay_estimates(), "bands_hz": [125, 250, 500, 1000, 2000, 4000, 8000]}
+                if self.path == "/api/field":
+                    from .engine.field_grid import sample_room_field
+                    result = sample_room_field(room, frequency_hz=field_options.get("frequency_hz", 1000),
+                        grid_size=field_options.get("grid_size", 13), height_m=field_options.get("height_m"),
+                        reflection_order=field_options.get("reflection_order", 1))
                 if self.path == "/api/instructions":
                     from .room_instructions import make_instructions
                     result = make_instructions(document)
