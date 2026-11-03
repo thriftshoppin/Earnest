@@ -4,6 +4,11 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Restored the original StageJack selectable playback-loopback analyzer in Frankenjack and corrected the graph to show Earnest's seven reflection EQ filters. Offline checks cover sample decoding, missing input and the curve; live monitor behavior still needs verification.
+- Added a suite updater design covering staged installation, compatibility, user data and rollback; it is not implemented.
+
+## Local build 93a7ce8 — 2026-11-03
+
 - Added in-stream replacement room profiles with a 120 ms warm-up and 150 ms linear crossfade, plus offline continuity and invalid-profile checks. Endpoint changes still restart the bridge; live behavior and CPU headroom remain unverified.
 
 ## Local build c87e84f — 2026-11-03

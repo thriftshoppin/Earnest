@@ -8,7 +8,7 @@ try {
     Copy-Item (Join-Path $native 'NAudio.Core.dll'), (Join-Path $native 'NAudio.Wasapi.dll') -Destination $tempDir
     $exe = Join-Path $tempDir 'room-tests.exe'
     $net = Join-Path $env:WINDIR 'Microsoft.NET\Framework64\v4.0.30319\netstandard.dll'
-    & $compiler /nologo /target:exe "/out:$exe" /reference:System.Core.dll "/reference:$net" "/reference:$tempDir\NAudio.Core.dll" "/reference:$tempDir\NAudio.Wasapi.dll" (Join-Path $root 'lab\frankenjack\src\EarnestShell.cs') (Join-Path $PSScriptRoot 'FrankenjackRoomTests.cs')
+    & $compiler /nologo /target:exe "/out:$exe" /reference:System.Core.dll "/reference:$net" "/reference:$tempDir\NAudio.Core.dll" "/reference:$tempDir\NAudio.Wasapi.dll" (Join-Path $root 'lab\frankenjack\src\EarnestShell.cs') (Join-Path $root 'lab\frankenjack\src\StageJackMonitor.cs') (Join-Path $PSScriptRoot 'FrankenjackRoomTests.cs')
     if ($LASTEXITCODE -ne 0) { throw 'Could not build room selection checks.' }
     & $exe
     if ($LASTEXITCODE -ne 0) { throw 'Room selection checks failed.' }

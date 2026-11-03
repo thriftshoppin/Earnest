@@ -203,11 +203,9 @@ sealed class MainWindow : Form {
         int stageHeight = stageEnabled ? sliders["Stage height"].Value : 50;
         float low = eqEnabled ? sliders["Low"].Value : 0, mid = eqEnabled ? sliders["Mid"].Value : 0, high = eqEnabled ? sliders["High"].Value : 0;
         eqView.SetCurve(EqModel.Curve(160, AudioEngine.Rate, low, mid, high, stageHeight, adv, bv));
-        int n = adv ? 3 + bands.Length : 3;
+        int n = 7;
         string[] names = new string[n]; float[] hz = new float[n], db = new float[n]; bool[] major = new bool[n];
-        names[0] = "Low"; hz[0] = EqModel.LowHz; names[1] = "Mid"; hz[1] = EqModel.MidHz; names[2] = "High"; hz[2] = EqModel.HighHz;
-        for (int i = 0; i < 3; i++) { db[i] = eqEnabled ? sliders[names[i]].Value : 0; major[i] = true; }
-        if (adv) for (int i = 0; i < bands.Length; i++) { names[3 + i] = bands[i]; hz[3 + i] = Dsp.Freqs[i]; db[3 + i] = bv[i]; }
+        for (int i = 0; i < n; i++) { names[i] = bands[i+2]; hz[i] = Dsp.Freqs[i+2]; db[i] = bv[i+2]; major[i] = i==0 || i==3 || i==6; }
         eqView.SetNodes(names, hz, db, major);
     }
     void UpdateSpectrum() {
@@ -460,7 +458,7 @@ sealed class MainWindow : Form {
         void DrawAnalysisPicker(Graphics g, Rectangle r) {
             using (SolidBrush fill = new SolidBrush(Color.FromArgb(24, 0, 190, 255))) g.FillRectangle(fill, r);
             DrawFrame(g, r, ElectricBlue);
-            DrawText(g, "ANALYSIS NOT WIRED", app.small, ElectricBlue, r.X + 7, r.Y + 2);
+            DrawText(g, app.engine.MonitorError == null ? "ANALYSIS TAP" : "ANALYSIS ERROR", app.small, ElectricBlue, r.X + 7, r.Y + 2);
             Device d = app.analysisBox.SelectedItem as Device;
             string selected = d == null ? "NO DEVICE" : (d.Id < 0 ? "SYSTEM DEFAULT" : d.Name);
             DrawText(g, Clip(selected, Math.Max(7, (r.Width - 22) / 6)), app.small, TextColor, r.X + 7, r.Y + 16);
@@ -641,7 +639,11 @@ sealed class MainWindow : Form {
                 dropdown = null; app.eqView.Visible = true; Invalidate(); return;
             }
             if (p.X > Width - 115 && p.Y < 82) { app.ResetAll(); Invalidate(); return; }
-            if (AnalysisPickerBounds.Contains(p)) return;
+            if (AnalysisPickerBounds.Contains(p)) {
+                dropdown = "analysis"; dropdownOffset = 0;
+                Rectangle r = AnalysisPickerBounds; dropRect = new Rectangle(Math.Max(12, r.Right - 230), r.Bottom, 220, 30);
+                app.eqView.Visible = false; Invalidate(); return;
+            }
             Rectangle[] route = RouteControls;
             if (route[0].Contains(p)) { dropdown = "input"; dropdownOffset = 0; dropRect = new Rectangle(route[0].X, route[0].Bottom, route[0].Width, 30); Invalidate(); return; }
             if (route[1].Contains(p)) { dropdown = "output"; dropdownOffset = 0; dropRect = new Rectangle(route[1].X, route[1].Bottom, route[1].Width, 30); Invalidate(); return; }

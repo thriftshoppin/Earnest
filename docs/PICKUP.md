@@ -14,11 +14,14 @@ Current priority: work from the equations to independent, correctly labeled tuni
 
 - `earnest/engine/`: room model, solver, rendering, physics, analysis components and offline session.
 - `docs/ROOM_SOLVER_MATH.md`, `docs/PHYSICS_NOTES.md`: equations, assumptions, sources and limitations; `docs/CLI_COMMAND_TRANSLATION.md`: commands and proposals; `docs/ENGINE_ARCHITECTURE.md` and `docs/ROADMAP.md`: architecture and future direction.
+- `docs/SUITE_UPDATES_PLAN.md`: proposed suite-wide updater, staging, compatibility and rollback; not an implementation.
 - `CHANGELOG.md` records changes by local build; automated checks live in `tests/`.
 - `lab/frankenjack/`: Earnest-only StageJack shell and native audio bridge. The build script places new binaries in `lab/frankenjack/build/`. Installing those into a VM or host is a separate operation.
 - `lab/driver/` and `lab/vm/`: driver and VM packaging work. Check their current contents and installation state before making deployment claims.
 
 Recent local builds separated decay from tail duration, added direct EQ independent of reflection EQ, wired stereo width and added file-based room percentage commands. The room chooser in Frankenjack lets the user select a room file. Room changes are now prepared and crossfaded within the running bridge; endpoint changes still restart it. The crossfade has offline coverage only and temporarily raises CPU load; the new room's long tail takes time to build. Width is stereo mid/side processing, not physical 3D placement. Existing live gain limits and routing require separate review; do not assume a device path is exclusive or that a selected device is safe from feedback.
+
+Frankenjack now reuses StageJack's selected-playback loopback analyzer and spectrum renderer, with a curve for Earnest's seven reflection EQ bands. The monitor is a separate Windows playback-device tap; it represents that endpoint's mix and can include other applications, rather than exclusively proving what the bridge sent. Build and offline checks passed, but the updated analyzer still needs a live check.
 
 The room model uses explicit image paths for rectangular geometry and a statistical late tail; it is not a full physical reconstruction of arbitrary spaces or plugin internals. Matched dry/wet recordings can constrain a model but do not uniquely identify a room or validate every source. The current instrument classifier is reference similarity, not a validated general-purpose separator or trained voice model. Pyroomacoustics is one documented simulator to compare on matched scenes and measured responses.
 

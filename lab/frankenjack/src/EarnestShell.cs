@@ -23,7 +23,22 @@ public static class Dsp { public static readonly float[] Freqs = {31,62,125,250,
 public static class EqModel {
     public const float LowHz=150, MidHz=1000, HighHz=5000;
     public static float FreqAt(int i,int n) { return (float)(20*Math.Pow(1000,i/(double)(n-1))); }
-    public static float[] Curve(int n,float fs,float low,float mid,float high,float height,bool advanced,float[] bands) { return new float[n]; }
+    // Match the seven peaking filters used by the Earnest host, not StageJack's
+    // different ten-band and shelf filter chain.
+    public static float[] Curve(int n,float fs,float low,float mid,float high,float height,bool advanced,float[] bands) {
+        var result=new float[n];
+        for(int i=0;i<n;i++) {
+            double w=2*Math.PI*FreqAt(i,n)/fs, cr=Math.Cos(w), ci=-Math.Sin(w), c2r=Math.Cos(2*w), c2i=-Math.Sin(2*w), db=0;
+            for(int j=2;j<=8;j++) {
+                double A=Math.Pow(10,bands[j]/40), w0=2*Math.PI*Dsp.Freqs[j]/fs, alpha=Math.Sin(w0)/(2*Math.Sqrt(2));
+                double b0=1+alpha*A, b1=-2*Math.Cos(w0), b2=1-alpha*A, a0=1+alpha/A, a1=b1, a2=1-alpha/A;
+                double nr=b0+b1*cr+b2*c2r, ni=b1*ci+b2*c2i, dr=a0+a1*cr+a2*c2r, di=a1*ci+a2*c2i;
+                db+=10*Math.Log10((nr*nr+ni*ni)/(dr*dr+di*di));
+            }
+            result[i]=(float)db;
+        }
+        return result;
+    }
 }
 public sealed class EarnestControls {
     readonly EarnestEngine owner; bool bypass;
@@ -40,6 +55,7 @@ public sealed class EarnestEngine {
     readonly string root, profile, host, gainFile, eqFile, widthFile, profileUpdateFile; string room; Process bridge; bool active, building; int generation;
     int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100, width=50; bool bypass; string input, output, error, activeInput, activeOutput;
     readonly float[] wetEq = new float[7];
+    readonly StageJackMonitor monitor = new StageJackMonitor();
     public readonly EarnestControls Dsp;
     public EarnestEngine() {
         root = Environment.GetEnvironmentVariable("EARNEST_HOME");
@@ -132,8 +148,9 @@ public sealed class EarnestEngine {
         finally { lock(gate) { building=false; if(active && id!=generation) timer.Change(900,Timeout.Infinite); } }
     }
     public void Stop() { lock(gate) { active=false; generation++; timer.Change(Timeout.Infinite,Timeout.Infinite); if(bridge!=null && !bridge.HasExited) { bridge.Kill(); bridge.WaitForExit(); } bridge=null; } }
-    public void Shutdown() { Stop(); timer.Dispose(); }
-    public void SetAnalysisEndpoint(string ignored) { }
-    public void CopyRecentOutput(float[] l,float[] r) { Array.Clear(l,0,l.Length); Array.Clear(r,0,r.Length); }
+    public void Shutdown() { Stop(); timer.Dispose(); monitor.Dispose(); }
+    public string MonitorError { get { return monitor.MonitorError; } }
+    public void SetAnalysisEndpoint(string endpoint) { monitor.SetAnalysisEndpoint(endpoint); }
+    public void CopyRecentOutput(float[] l,float[] r) { monitor.CopyRecentOutput(l,r); }
     public void CopyRecentInput(float[] l,float[] r) { Array.Clear(l,0,l.Length); Array.Clear(r,0,r.Length); }
 }

@@ -80,7 +80,7 @@ public sealed class EqView : Control {
     public event Action<string, int> NodeDrag;      // (slider name, new dB value)
     const float DbRange = 15f;                      // vertical half-range of the curve
     float[] spec, curve; string[] names; float[] hz, nodeDb; bool[] major; bool outputMonitor = true;
-    int drag = -1, hover = -1; string selectedName = "Low";
+    int drag = -1, hover = -1; string selectedName = "125 Hz";
 
     public EqView() {
         SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
@@ -174,7 +174,7 @@ public sealed class EqView : Control {
         }
 
         // Compact selector/readout controls live on the analyzer, not in a separate slider row.
-        string[] primary = { "Low", "Mid", "High" };
+        string[] primary = { "125 Hz", "1 kHz", "8 kHz" };
         for (int i = 0; i < primary.Length; i++) {
             Rectangle chip = BandChipBounds(i); bool active = primary[i] == selectedName;
             Color edge = active ? acc : Color.FromArgb(65, 94, 101, 95);
@@ -225,7 +225,7 @@ public sealed class EqView : Control {
     protected override void OnMouseDown(MouseEventArgs e) {
         base.OnMouseDown(e); if (e.Button != MouseButtons.Left) return;
         int chip = HitBandChip(e.Location);
-        if (chip >= 0) { selectedName = new string[] { "Low", "Mid", "High" }[chip]; Invalidate(); return; }
+        if (chip >= 0) { selectedName = new string[] { "125 Hz", "1 kHz", "8 kHz" }[chip]; Invalidate(); return; }
         // A click between nodes grabs the closest band; dragging its handle adjusts gain.
         int i = Hit(e.X, e.Y); if (i < 0) i = NearestNode(e.X);
         if (i >= 0) { selectedName = names[i]; drag = i; Capture = true; Emit(i, e.Y); Invalidate(); }
