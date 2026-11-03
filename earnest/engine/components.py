@@ -316,7 +316,8 @@ class RoomRenderComponent:
         room = context.inputs["room.model"].value
         source = context.inputs["audio.sources"].value
         sample_rate = int(context.options.get("sample_rate", 48000))
-        rendered = render_room(room, context.inputs["room.solution"].value, source, fs=sample_rate)
+        rendered = render_room(room, context.inputs["room.solution"].value, source, fs=sample_rate,
+                               backend=context.options.get("backend", "cpu"), cuda_device=context.options.get("cuda_device", 0))
         return {"room.rendered": Artifact("earnest.room-render.v1", rendered,
                                            source=room.schema,
                                            notes=tuple(rendered["render_limits"]))}

@@ -698,6 +698,20 @@ def cmd_room_solve(a):
     return 0
 
 
+def cmd_cuda_devices(a):
+    try:
+        import cupy as cp
+        devices = []
+        for index in range(cp.cuda.runtime.getDeviceCount()):
+            props = cp.cuda.runtime.getDeviceProperties(index)
+            name = props['name'].decode('utf-8') if isinstance(props['name'], bytes) else props['name']
+            devices.append({'index': index, 'name': name, 'total_memory_bytes': int(props['totalGlobalMem'])})
+        print(json.dumps({'schema': 'earnest.cuda-devices.v1', 'devices': devices}, indent=2))
+    except Exception as exc:
+        raise SystemExit('cuda-devices: CUDA unavailable: %s' % exc)
+    return 0
+
+
 def cmd_simulate(a):
     import math
     import re
@@ -724,7 +738,7 @@ def cmd_simulate(a):
             {"room.model": Artifact("earnest.room-model.v1", spec, source=str(room_path.resolve())),
              "audio.sources": Artifact("earnest.audio-sources.v1", source, source=str(Path(a.audio).resolve()))},
             {"room.solve": {"sample_rate": a.sample_rate, "reflection_order": a.order},
-             "room.render": {"sample_rate": a.sample_rate}})
+             "room.render": {"sample_rate": a.sample_rate, "backend": a.backend, "cuda_device": a.cuda_device}})
         solution, rendered = run.artifacts["room.solution"].value, run.artifacts["room.rendered"].value
     except (OSError, json.JSONDecodeError, EngineError, RoomValidationError, ValueError) as exc:
         raise SystemExit("simulate: %s" % exc)
@@ -758,6 +772,7 @@ def cmd_simulate(a):
                 "input_audio": str(Path(a.audio).resolve()), "input_sample_rate_hz": int(source_fs),
                 "render_sample_rate_hz": a.sample_rate, "input_frames_after_resampling": len(source),
                 "source_channels": [s.id for s in spec.sources], "outputs": outputs,
+                "compute_backend": rendered["compute_backend"], "cuda_device": rendered["cuda_device"], "cuda_device_name": rendered["cuda_device_name"],
                 "render_limits": rendered["render_limits"], "model_limits": solution["model_limits"]}
     save_json(out / "simulation.json", metadata)
     save_json(out / "solution.json", compact_solution)
@@ -1495,12 +1510,16 @@ def main(argv=None):
     rsolve.add_argument("--order", type=int, help="maximum total specular reflection order (overrides engine_controls in the room file)")
     rsolve.add_argument("--sample-rate", type=int, default=48000, help="IR sample rate (default 48000 Hz)")
     rsolve.set_defaults(fn=cmd_room_solve)
+    cuda_devices = sub.add_parser("cuda-devices", help="list CUDA devices visible to this Python environment")
+    cuda_devices.set_defaults(fn=cmd_cuda_devices)
     sim = sub.add_parser("simulate", help="drive source audio through a solved room, render each receiver, and analyze the output")
     sim.add_argument("room_file", help="custom room JSON")
     sim.add_argument("audio", help="audio with one input channel per configured room source")
     sim.add_argument("--out", help="output folder (default: a new runs folder)")
     sim.add_argument("--order", type=int, help="maximum total specular reflection order (overrides engine_controls in the room file)")
     sim.add_argument("--sample-rate", type=int, default=48000, help="render sample rate (default 48000 Hz)")
+    sim.add_argument("--backend", choices=("cpu", "cuda"), default="cpu", help="offline rendering backend (default cpu)")
+    sim.add_argument("--cuda-device", type=int, default=0, help="CUDA device index when using the CUDA backend")
     sim.set_defaults(fn=cmd_simulate)
     from . import crosscheck
     c = sub.add_parser("crosscheck", help="compare room fits of the eight Univerb renders with univerb_results.csv")

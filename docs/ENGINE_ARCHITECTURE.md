@@ -88,3 +88,7 @@ The next design work is to formalize spatial observations and confidence/uncerta
 ## Residual-driven effect pursuit
 
 The offline `audio.effect_pursuit` component consumes observed and known dry audio and emits a versioned pursuit report, prediction and residual. The first candidate family is integer-sample delay with a shared gain. The full comparison report is included for downstream analysis. See [effect pursuit](EFFECT_PURSUIT.md).
+
+## Optional CUDA rendering
+
+The `simulate` command can use `--backend cuda --cuda-device 0` for the offline room render when CuPy and a CUDA-visible GPU are available. Geometry, solving and the live bridge remain on CPU. See [CUDA backend](CUDA_BACKEND.md) for setup, device discovery, scope and validation.

@@ -2,6 +2,11 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — CUDA rendering foundation
+
+- Added an optional CUDA backend for the offline room renderer's seven-band frequency partition and FFT convolution, explicit GPU index selection, CUDA device discovery and simulation provenance. The solver, statistics, other analyses and live audio bridge remain CPU-based.
+- Added CPU/GPU parity tests and documented setup, scope and a limited host benchmark. The host GTX 1650 SUPER was disabled by Windows; the CUDA checks used the available RTX 4060 Ti. The VMware guest has not been shown to have CUDA access.
+
 ## Unreleased — VM room-control update
 
 - Added Start Feed and Stop Feed control that records up to five minutes of the selected mono/stereo analysis endpoint into the guest temporary folder, then runs the optional Demucs backend if installed and opens the results folder. The capture and batch separator are not continuous real-time separation, and instrument faders remain unimplemented. The button has not yet been exercised on the VM or with a live endpoint.
