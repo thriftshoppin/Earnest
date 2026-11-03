@@ -5,7 +5,8 @@ from dataclasses import dataclass
 import itertools
 import math
 
-from .room import Point, RoomSpec
+from .room import BANDS_HZ, Point, RoomSpec
+from .physics import air_absorption_db_per_m, directivity_pressure
 
 
 @dataclass(frozen=True)
@@ -14,6 +15,7 @@ class ImagePath:
     distance_m: float
     gain_by_band: tuple[float, ...]
     image_index: tuple[int, int, int]
+    directivity_gain: float = 1.0
 
 
 def _axis_images(source: float, receiver: float, size: float, order: int):
@@ -41,6 +43,8 @@ def image_paths(room: RoomSpec, source: Point, receiver: Point, max_order: int =
         raise ValueError("max_order must be between 0 and 12")
     dims = room.dimensions
     c = room.sound_speed_m_s()
+    air_loss = tuple(air_absorption_db_per_m(f, room.temperature_c, room.humidity_percent, room.pressure_pa)
+                     for f in BANDS_HZ) if room.air_absorption_enabled else (0.0,) * len(BANDS_HZ)
     paths = []
     axes = [_axis_images(source.position[i], receiver.position[i], dims[i], max_order) for i in range(3)]
     # Filter by total reflection order after combining axes, so max_order means total bounces.
@@ -53,6 +57,13 @@ def image_paths(room: RoomSpec, source: Point, receiver: Point, max_order: int =
         distance = math.sqrt(sum((image[i] - receiver.position[i]) ** 2 for i in range(3)))
         if distance <= 1e-9:
             continue
+        # Unfolding mirrors each source axis on odd image parity. Transform
+        # the image-to-receiver ray back into the source's physical frame.
+        source_ray = tuple((receiver.position[i] - image[i]) * (-1.0 if image_index[i] % 2 else 1.0)
+                           for i in range(3))
+        receiver_ray = tuple(image[i] - receiver.position[i] for i in range(3))
+        directional = (directivity_pressure(source.directivity, source.orientation, source_ray)
+                       * directivity_pressure(receiver.directivity, receiver.orientation, receiver_ray))
         hits = [(item[1], item[2]) for item in candidate]
         gains = []
         for band in range(7):
@@ -64,6 +75,6 @@ def image_paths(room: RoomSpec, source: Point, receiver: Point, max_order: int =
                         # statistical late-field energy estimate for the non-resolved portion.
                         retention = (1.0 - room.absorption(wall, band)) * (1.0 - room.scattering(wall, band))
                         energy_retention *= retention ** count
-            gains.append(math.sqrt(energy_retention) / distance)
-        paths.append(ImagePath(distance / c, distance, tuple(gains), image_index))
+            gains.append(directional * math.sqrt(energy_retention) / distance * 10.0 ** (-air_loss[band] * distance / 20.0))
+        paths.append(ImagePath(distance / c, distance, tuple(gains), image_index, directional))
     return sorted(paths, key=lambda p: p.delay_s)

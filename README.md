@@ -8,6 +8,8 @@ Earnest's engine is being organized as a component host: analysis, room inferenc
 
 The research direction is documented in the [roadmap](docs/ROADMAP.md); the equations and their limitations are in [room solver math](docs/ROOM_SOLVER_MATH.md). The current root license is all-rights-reserved, despite the project's open-source ambition; a license change remains to be selected.
 
+Use `earnest room-editor --open` to create or import a room in a local browser editor, validate it with the engine, and export the room JSON. New physics models and their exact limits are recorded in [physics notes](docs/PHYSICS_NOTES.md).
+
 **Quick start: put the exports in `inbox\`, double-click `earnest.bat`.** It analyzes every new or changed file, copies the newest results (and each file's trace) to `runs\latest\` and opens that folder.
 (`py -3.14 -m earnest run [--force] [--stop-on-fail]` does the same from a terminal; `inbox\processed.json` remembers what was done; your files are never moved or deleted.)
 **File names:** one pass per file is the normal case. `<room><digits>.flac` is room `<room>` at Mix `<digits>` (`union100.flac` = room "union", Mix 100); a file whose name starts with `dry` is the dry reference

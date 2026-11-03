@@ -25,20 +25,34 @@ def cmd_visualize(a):
 
 
 def cmd_live_view(a):
+    import os
     import subprocess
+    import threading
     import webbrowser
     from .io import ROOT
+    from .room_editor import create_server
     server = ROOT / "live" / "server.js"
     if not server.is_file():
         raise SystemExit("live-view: viewer is not installed: %s" % server)
+    try:
+        editor = create_server(a.editor_port)
+    except OSError as exc:
+        raise SystemExit("live-view: unable to start Room Studio: %s; choose --editor-port" % exc)
+    threading.Thread(target=editor.serve_forever, daemon=True).start()
+    editor_port = editor.server_address[1]
     print("live-view: read-only playback monitoring; this does not create an audio output", flush=True)
+    print("live-view: Room Studio available on http://127.0.0.1:%s/" % editor_port, flush=True)
     if a.open:
-        import threading
         threading.Timer(1.5, lambda: webbrowser.open("http://127.0.0.1:%d/" % a.port)).start()
     try:
-        return subprocess.call(["node", str(server), a.endpoint, str(a.port)], cwd=str(ROOT))
+        env = os.environ.copy()
+        env["EARNEST_EDITOR_PORT"] = str(editor_port)
+        return subprocess.call(["node", str(server), a.endpoint, str(a.port)], cwd=str(ROOT), env=env)
     except OSError as exc:
         raise SystemExit("live-view: %s" % exc)
+    finally:
+        editor.shutdown()
+        editor.server_close()
 
 
 def cmd_gen(a):
@@ -226,11 +240,12 @@ def _room_template():
         "surfaces": {wall: {"material_id": "painted_plaster"} for wall in
                      ("x_min", "x_max", "y_min", "y_max", "z_min", "z_max")},
         "sources": [
-            {"id": "speaker_left", "position": [2.0, 2.0, 1.4], "level_db": [0, 0, 0, 0, 0, 0, 0]},
-            {"id": "speaker_right", "position": [2.0, 3.0, 1.4], "level_db": [0, 0, 0, 0, 0, 0, 0]}
+            {"id": "speaker_left", "position": [2.0, 2.0, 1.4], "level_db": [0, 0, 0, 0, 0, 0, 0], "directivity": "omni", "orientation": [1, 0, 0]},
+            {"id": "speaker_right", "position": [2.0, 3.0, 1.4], "level_db": [0, 0, 0, 0, 0, 0, 0], "directivity": "omni", "orientation": [1, 0, 0]}
         ],
-        "receivers": [{"id": "seat_1", "position": [5.5, 2.5, 1.2]}],
-        "environment": {"temperature_c": 20.0, "humidity_percent": 50.0},
+        "receivers": [{"id": "seat_1", "position": [5.5, 2.5, 1.2], "directivity": "omni", "orientation": [-1, 0, 0]}],
+        "environment": {"temperature_c": 20.0, "humidity_percent": 50.0,
+                        "pressure_pa": 101325.0, "air_absorption_enabled": False},
         "engine_controls": {
             "reflection_order": 4, "decay_model": "eyring",
             "absorption_scale": [1, 1, 1, 1, 1, 1, 1],
@@ -247,6 +262,52 @@ def cmd_room_template(a):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(_room_template(), indent=2) + "\n", encoding="utf-8")
     print("room-template: wrote %s; edit dimensions, six surface assignments, sources and receivers" % path)
+    return 0
+
+
+def cmd_room_editor(a):
+    from .room_editor import serve
+    try:
+        serve(a.port, open_browser=a.open)
+    except (OSError, ValueError) as exc:
+        raise SystemExit("room-editor: %s" % exc)
+    return 0
+
+
+def cmd_instrument_modes(a):
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        path = Path(a.model)
+        model = json.loads(path.read_text(encoding="utf-8-sig"))
+        run = create_engine().execute(("instrument.modes",),
+            {"instrument.model": Artifact("earnest.instrument-model.v1", model, source=str(path.resolve()))})
+        print(json.dumps(run.artifacts["instrument.modes"].value, indent=2))
+    except (OSError, ValueError, TypeError, EngineError) as exc:
+        raise SystemExit("instrument-modes: %s" % exc)
+    return 0
+
+
+def cmd_frequency_trace(a):
+    import soundfile as sf
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        path = Path(a.audio)
+        samples, fs = sf.read(str(path), dtype="float64", always_2d=True)
+        run = create_engine().execute(("audio.frequency_trace",),
+            {"audio.samples": Artifact("earnest.audio-samples.v1", {"samples": samples, "sample_rate_hz": int(fs)}, source=str(path.resolve()))},
+            {"audio.frequency_trace": {"window_size": a.window, "hop_size": a.hop,
+                                       "min_hz": a.min_hz, "max_hz": a.max_hz, "max_peaks": a.max_peaks,
+                                       "min_level_dbfs": a.min_level_dbfs, "relative_threshold_db": a.relative_threshold_db}})
+        result = run.artifacts["audio.frequency_trace"].value
+        result["source_file"] = str(path.resolve())
+        out = Path(a.out) if a.out else new_run("frequency-trace") / "frequency-trace.json"
+        if out.exists():
+            raise ValueError("output already exists; choose a new path")
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(result, indent=2, allow_nan=False) + "\n", encoding="utf-8")
+        print("frequency-trace: %d frames, %d channel(s) -> %s" % (len(result["frames"]), result["channels"], out))
+    except (OSError, ValueError, TypeError, EngineError, RuntimeError) as exc:
+        raise SystemExit("frequency-trace: %s" % exc)
     return 0
 
 
@@ -866,6 +927,24 @@ def main(argv=None):
     rt = sub.add_parser("room-template", help="write a starter custom rectangular-room JSON file")
     rt.add_argument("file", help="destination room JSON; existing files are not overwritten")
     rt.set_defaults(fn=cmd_room_template)
+    editor = sub.add_parser("room-editor", help="open the local visual room editor using the shared physics engine")
+    editor.add_argument("--port", type=int, default=8775)
+    editor.add_argument("--open", action="store_true", help="open the editor in the default browser")
+    editor.set_defaults(fn=cmd_room_editor)
+    instrument = sub.add_parser("instrument-modes", help="compute ideal string or pipe resonator modes from a JSON model")
+    instrument.add_argument("model", help="instrument model JSON file")
+    instrument.set_defaults(fn=cmd_instrument_modes)
+    frequency = sub.add_parser("frequency-trace", help="transcribe time-stamped spectral peaks from an audio file")
+    frequency.add_argument("audio")
+    frequency.add_argument("--out", help="new JSON output file")
+    frequency.add_argument("--window", type=int, default=4096)
+    frequency.add_argument("--hop", type=int, default=512)
+    frequency.add_argument("--min-hz", type=float, default=40.0)
+    frequency.add_argument("--max-hz", type=float)
+    frequency.add_argument("--max-peaks", type=int, default=24)
+    frequency.add_argument("--min-level-dbfs", type=float, default=-80.0)
+    frequency.add_argument("--relative-threshold-db", type=float, default=-45.0)
+    frequency.set_defaults(fn=cmd_frequency_trace)
     rf = sub.add_parser("room-fit", help="seed editable room absorption controls from a measured Earnest formula.json")
     rf.add_argument("room_file", help="base room configuration")
     rf.add_argument("formula", help="formula.json created by analyzing a dry/wet sample or plugin render")
@@ -958,6 +1037,7 @@ def main(argv=None):
     live = sub.add_parser("live-view", help="open the read-only live head and playback visualizer")
     live.add_argument("--endpoint", default="Speakers (7.1 Surround Sound)", help="Windows playback endpoint name or ID")
     live.add_argument("--port", type=int, default=8774)
+    live.add_argument("--editor-port", type=int, default=8775, help="local Room Studio port (0 chooses a free port)")
     live.add_argument("--open", action="store_true", help="open the local viewer in a browser")
     live.set_defaults(fn=cmd_live_view)
     visual = sub.add_parser("visualize", help="build an interactive room and measurement comparison report")

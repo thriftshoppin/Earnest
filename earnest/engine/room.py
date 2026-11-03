@@ -40,6 +40,8 @@ class Point:
     id: str
     position: tuple[float, float, float]
     level_db: tuple[float, ...]
+    directivity: str = "omni"
+    orientation: tuple[float, float, float] = (1.0, 0.0, 0.0)
 
 
 @dataclass(frozen=True)
@@ -63,6 +65,9 @@ class RoomSpec:
     temperature_c: float
     controls: EngineControls = EngineControls()
     schema: str = ROOM_SCHEMA
+    air_absorption_enabled: bool = False
+    humidity_percent: float = 50.0
+    pressure_pa: float = 101325.0
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "RoomSpec":
@@ -132,18 +137,35 @@ class RoomSpec:
                 if not isinstance(pos, (list, tuple)) or len(pos) != 3:
                     raise RoomValidationError("%s.position must have three coordinates" % label)
                 xyz = tuple(_number(v, label + ".position", 0) for v in pos)
-                if any(v >= dimensions[i] for i, v in enumerate(xyz)):
+                if any(v <= 0 or v >= dimensions[i] for i, v in enumerate(xyz)):
                     raise RoomValidationError("%s.position must be inside the room, away from the walls" % label)
                 levels = row.get("level_db", [0.0] * len(BANDS_HZ))
                 if not isinstance(levels, list) or len(levels) != len(BANDS_HZ):
                     raise RoomValidationError("%s.level_db must have seven values, one per band" % label)
-                out.append(Point(row["id"], xyz, tuple(_number(v, label + ".level_db") for v in levels)))
+                directivity = row.get("directivity", "omni")
+                if directivity not in ("omni", "cardioid", "figure8"):
+                    raise RoomValidationError("%s.directivity must be omni, cardioid, or figure8" % label)
+                direction = row.get("orientation", [1.0, 0.0, 0.0])
+                if not isinstance(direction, (list, tuple)) or len(direction) != 3:
+                    raise RoomValidationError("%s.orientation must be a three-component direction" % label)
+                orientation = tuple(_number(v, label + ".orientation") for v in direction)
+                if math.hypot(*orientation) <= 1e-12:
+                    raise RoomValidationError("%s.orientation must be nonzero" % label)
+                out.append(Point(row["id"], xyz, tuple(_number(v, label + ".level_db") for v in levels),
+                                 directivity, orientation))
             return tuple(out)
 
         env = data.get("environment") or {}
         if not isinstance(env, dict):
             raise RoomValidationError("environment must be an object")
         temp = _number(env.get("temperature_c", 20), "environment.temperature_c", -50, 100)
+        humidity = _number(env.get("humidity_percent", 50), "environment.humidity_percent", 0, 100)
+        pressure = _number(env.get("pressure_pa", 101325), "environment.pressure_pa", 10000, 200000)
+        air_absorption = env.get("air_absorption_enabled", False)
+        if not isinstance(air_absorption, bool):
+            raise RoomValidationError("environment.air_absorption_enabled must be a boolean")
+        if air_absorption and not -20 <= temp <= 50:
+            raise RoomValidationError("air absorption model requires temperature between -20 and 50 C")
         control_raw = data.get("engine_controls") or {}
         if not isinstance(control_raw, dict):
             raise RoomValidationError("engine_controls must be an object")
@@ -171,7 +193,8 @@ class RoomSpec:
             for receiver in receivers:
                 if math.dist(source.position, receiver.position) <= 1e-9:
                     raise RoomValidationError("source %r and receiver %r must be separated for the point-source model" % (source.id, receiver.id))
-        return cls(dimensions, materials, surfaces, sources, receivers, temp, controls)
+        return cls(dimensions, materials, surfaces, sources, receivers, temp, controls,
+                   air_absorption_enabled=air_absorption, humidity_percent=humidity, pressure_pa=pressure)
 
     def absorption(self, wall: str, band: int) -> float:
         return min(1.0, self.surfaces[wall].absorption[band] * self.controls.absorption_scale[band])

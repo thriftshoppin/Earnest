@@ -8,6 +8,7 @@ import numpy as np
 
 from .room import BANDS_HZ, RoomSpec
 from .shoebox import image_paths
+from .physics import air_absorption_db_per_m
 from ..dsp import bandpass_fft
 
 
@@ -75,6 +76,11 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
             if not paths:
                 raise ValueError("source %r and receiver %r have no valid direct path; check their separation" % (source.id, receiver.id))
             direct = paths[0]
+            # Normalize against an omnidirectional direct path, so a directional
+            # null or negative polarity remains observable and never divides by zero.
+            normalization = [(10.0 ** (-air_absorption_db_per_m(f, room.temperature_c, room.humidity_percent, room.pressure_pa)
+                                        * direct.distance_m / 20.0) if room.air_absorption_enabled else 1.0)
+                             / direct.distance_m for f in BANDS_HZ]
             last_path_s = max((p.delay_s for p in paths), default=0.0)
             tail_start_s = last_path_s + 0.02
             decay_rows = room.decay_estimates()
@@ -90,11 +96,11 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
                 for band, gain in enumerate(path.gain_by_band):
                     # Normalize path pressure to the direct path so outputs express room response
                     # independently of arbitrary source calibration.
-                    relative_gain = gain / max(direct.gain_by_band[band], 1e-30)
+                    relative_gain = gain / max(normalization[band], 1e-30)
                     _add_fractional_impulse(band_ir[band], sample, relative_gain)
             late_fields = []
             for band in range(7):
-                reflection_energy = sum((path.gain_by_band[band] / max(direct.gain_by_band[band], 1e-30)) ** 2
+                reflection_energy = sum((path.gain_by_band[band] / max(normalization[band], 1e-30)) ** 2
                                         for path in paths if path is not direct)
                 seed = sum((i + 1) * ord(ch) for i, ch in enumerate(source.id + ":" + receiver.id)) + band * 7919
                 tail, tail_meta = _late_field(room, band, direct.distance_m, reflection_energy,
@@ -117,9 +123,11 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
             reflections = [p for p in paths if p is not first]
             all_paths.append({"source_id": source.id, "receiver_id": receiver.id,
                               "paths": [{"delay_s": p.delay_s, "distance_m": p.distance_m,
-                                         "image_index": list(p.image_index), "gain_by_band": list(p.gain_by_band)} for p in paths]})
+                                         "image_index": list(p.image_index), "gain_by_band": list(p.gain_by_band),
+                                         "directivity_gain": p.directivity_gain} for p in paths]})
             pair_results.append({"source_id": source.id, "receiver_id": receiver.id,
                                  "direct_distance_m": direct.distance_m, "direct_delay_ms": direct.delay_s * 1000,
+                                 "directivity_gain": direct.directivity_gain,
                                  "path_count": len(paths),
                                  "reflection_density_per_s": len(reflections) / max(last_path_s, 1e-12),
                                  "band_energy_db": spectrum_db,
@@ -138,6 +146,9 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
         "schema": "earnest.room-solution.v1", "engine": "shoebox-image-source-v1",
         "room_schema": room.schema, "sample_rate_hz": fs,
         "bands_hz": list(BANDS_HZ), "temperature_c": room.temperature_c,
+        "air_absorption_enabled": room.air_absorption_enabled,
+        "humidity_percent": room.humidity_percent,
+        "pressure_pa": room.pressure_pa,
         "sound_speed_m_s": c, "dimensions_m": list(room.dimensions), "volume_m3": room.volume_m3,
         "max_total_reflection_order": max_order,
         "engine_controls": {"reflection_order": max_order,
@@ -157,6 +168,6 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
             "Band impulse responses are separate and are not phase-calibrated into a full-band waveform.",
             "Low-frequency modal frequencies are not synthesized; correlated-source cross terms are not included.",
             "Pressure gains are normalized to each source-receiver direct path; absolute SPL needs source and calibration data.",
-            "Air absorption, source/receiver directivity, and humidity correction are not modeled yet. Measured RT60 fitting adjusts equivalent per-band absorption scales only; it does not recover unique geometry or materials."
+            "When enabled, air absorption and ideal frequency-independent directivity affect explicit paths only; the statistical late tail and RT60 do not model these effects. Humidity effects on sound speed are not modeled. Measured RT60 fitting does not recover unique geometry or materials."
         ]
     }

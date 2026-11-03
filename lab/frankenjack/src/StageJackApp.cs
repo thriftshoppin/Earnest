@@ -87,7 +87,17 @@ sealed class MainWindow : Form {
         eqView.NodeDrag += delegate(string name, int v) { StageSlider sl; if (sliders.TryGetValue(name, out sl)) sl.Value = v; };
         deck = new HoloDeck(this) { Dock = DockStyle.Fill }; Controls.Add(deck); deck.Controls.Add(eqView); deck.PositionEqView();
         var advancedMix = new Button { Text="ADVANCED MIX", Left=Width-210, Top=76, Width=155, Height=28, BackColor=Color.FromArgb(31,48,45), ForeColor=Color.White, FlatStyle=FlatStyle.Flat };
-        advancedMix.Click += delegate { var panel = new AdvancedMix(); panel.Show(this); };
+        AdvancedMix advancedWindow = null;
+        foreach (var item in sliders) {
+            StageSlider control = item.Value;
+            control.ValueChanged += delegate { if (advancedWindow != null && !advancedWindow.IsDisposed) advancedWindow.SyncEngineControl(control.Name, control.Value); };
+        }
+        advancedMix.Click += delegate {
+            if (advancedWindow == null || advancedWindow.IsDisposed) {
+                advancedWindow = new AdvancedMix(key => sliders[key].Value, (key, value) => sliders[key].Value = value);
+                advancedWindow.Show(this);
+            } else advancedWindow.BringToFront();
+        };
         Controls.Add(advancedMix); advancedMix.BringToFront();
 
         saveTimer = new Timer { Interval = 500 }; saveTimer.Tick += delegate { saveTimer.Stop(); Save(); };

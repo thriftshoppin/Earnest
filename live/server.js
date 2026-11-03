@@ -24,6 +24,11 @@ const server=http.createServer((req,res)=>{
   const u=new URL(req.url,'http://127.0.0.1:'+port);
   res.setHeader('X-Content-Type-Options','nosniff');
   if(req.method!=='GET'){res.writeHead(405);res.end();return;}
+  if(u.pathname==='/room-studio'){
+    const editorPort=Number(process.env.EARNEST_EDITOR_PORT || 8775);
+    if(!Number.isInteger(editorPort) || editorPort < 1 || editorPort > 65535){res.writeHead(503);res.end('Room Studio unavailable');return;}
+    res.writeHead(302,{Location:'http://127.0.0.1:'+editorPort+'/'});res.end();return;
+  }
   if(u.pathname==='/api/state'){
     res.setHeader('Cache-Control','no-store');res.setHeader('Content-Type','application/json');
     res.end(JSON.stringify({endpoint:requested,last,error,connected:!!last && Date.now()-last.observed_at<1500}));return;

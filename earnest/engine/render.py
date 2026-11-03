@@ -84,7 +84,7 @@ def render_room(room: RoomSpec, solution: dict, source_audio: np.ndarray, fs: in
         for source in room.sources:
             pair = pair_rows[source.id]
             bands, residual = source_columns[source.id]
-            direct = _direct_kernel(pair["direct_delay_ms"] / 1000.0, fs)
+            direct = _direct_kernel(pair["direct_delay_ms"] / 1000.0, fs) * float(pair.get("directivity_gain", 1.0))
             for band_index, center in enumerate(BANDS_HZ):
                 level = 10.0 ** (source.level_db[band_index] / 20.0)
                 impulse = np.asarray(pair["band_ir"][str(center)], dtype=np.float64)
@@ -126,6 +126,6 @@ def render_room(room: RoomSpec, solution: dict, source_audio: np.ndarray, fs: in
     return {"sample_rate_hz": fs, "source_ids": [source.id for source in room.sources],
             "receiver_outputs": outputs,
             "mix_controls": {"direct_gain": direct_gain, "reflection_gain_db": list(reflection_gain_db)},
-            "render_limits": ["Mono pressure output per receiver; receiver orientation and speaker directivity are not modeled.",
+            "render_limits": ["Mono pressure output per receiver; ideal frequency-independent directivity is used only for explicit paths.",
                               "Below 125 Hz and above 8 kHz only the delayed direct signal is rendered.",
                               "The rendered signal is an offline approximation using separate octave-band responses."]}

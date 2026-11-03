@@ -26,6 +26,14 @@ class RoomParseComponent:
                          "room.engine_controls.diffuse_energy_scale", "late-field energy calibration"),
         ControlParameter("tail_duration_scale", "Tail duration", "x", 0.1, 4, 1.0,
                          "room.engine_controls.tail_duration_scale", "preview/render duration"),
+        ControlParameter("air_absorption_enabled", "Atmospheric absorption", "choice", None, None, "false",
+                         "room.environment.air_absorption_enabled", "enable pure-tone loss on explicit paths", ("false", "true")),
+        ControlParameter("temperature_c", "Air temperature", "°C", -50, 100, 20.0,
+                         "room.environment.temperature_c", "sound speed; air absorption requires -20 to 50 °C"),
+        ControlParameter("humidity_percent", "Relative humidity", "%", 0, 100, 50.0,
+                         "room.environment.humidity_percent", "atmospheric absorption model"),
+        ControlParameter("pressure_pa", "Atmospheric pressure", "Pa", 10000, 200000, 101325.0,
+                         "room.environment.pressure_pa", "atmospheric absorption model"),
     ) + tuple(
         ControlParameter("absorption_scale_%d" % hz, "Absorption scale %d Hz" % hz, "x", 0, 20, 1.0,
                          "room.engine_controls.absorption_scale[%d]" % index, "per-band decay calibration")
@@ -54,6 +62,66 @@ class RoomSolveComponent:
                               max_order=context.options.get("reflection_order"))
         return {"room.solution": Artifact("earnest.room-solution.v1", solution,
                                            source=room.schema, notes=tuple(solution["model_limits"]))}
+
+
+class FrequencyTraceComponent:
+    name = "audio.frequency_trace"
+    requires = ("audio.samples",)
+    provides = ("audio.frequency_trace",)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .frequency_trace import trace_frequencies
+        audio = context.inputs["audio.samples"].value
+        if not isinstance(audio, dict) or "samples" not in audio or "sample_rate_hz" not in audio:
+            raise EngineError("audio.samples needs samples and sample_rate_hz")
+        try:
+            result = trace_frequencies(audio["samples"], audio["sample_rate_hz"], **dict(context.options))
+        except (TypeError, ValueError) as exc:
+            raise EngineError("audio.frequency_trace: %s" % exc) from exc
+        return {"audio.frequency_trace": Artifact(result["schema"], result,
+                 source=context.inputs["audio.samples"].source, notes=tuple(result["limits"]))}
+
+
+class InstrumentModesComponent:
+    """Ideal resonator modes; instrument body and excitation are not inferred."""
+    name = "instrument.modes"
+    requires = ("instrument.model",)
+    provides = ("instrument.modes",)
+    parameters = (
+        ControlParameter("kind", "Ideal resonator type", "choice", None, None, "ideal-string",
+                         "instrument.model.kind", "select an idealized model",
+                         ("ideal-string", "stiff-string", "ideal-open-pipe", "ideal-closed-pipe", "ideal-circular-membrane")),
+        ControlParameter("count", "Mode count", "modes", 1, 256, 12,
+                         "instrument.model.count", "number of modes; circular membrane supports up to 24"),
+    )
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .physics import ideal_pipe_modes, ideal_string_modes, stiff_string_modes, circular_membrane_modes
+        model = context.inputs["instrument.model"].value
+        if not isinstance(model, dict):
+            raise EngineError("instrument.model must be an object")
+        kind = model.get("kind")
+        try:
+            count = model.get("count", 12)
+            if kind == "ideal-string":
+                frequencies = ideal_string_modes(model["length_m"], model["tension_n"], model["linear_density_kg_m"], count)
+            elif kind == "stiff-string":
+                frequencies = stiff_string_modes(model["length_m"], model["tension_n"], model["linear_density_kg_m"], model["inharmonicity"], count)
+            elif kind in ("ideal-open-pipe", "ideal-closed-pipe"):
+                boundary = "open-open" if kind == "ideal-open-pipe" else "open-closed"
+                frequencies = ideal_pipe_modes(model["effective_length_m"], model.get("sound_speed_m_s", 343.0), boundary, count)
+            elif kind == "ideal-circular-membrane":
+                modes = circular_membrane_modes(model["radius_m"], model["tension_n_m"], model["surface_density_kg_m2"], count)
+                frequencies = [mode["frequency_hz"] for mode in modes]
+            else:
+                raise ValueError("unknown resonator kind")
+        except (KeyError, TypeError, ValueError) as exc:
+            raise EngineError("instrument.modes: %s" % exc) from exc
+        return {"instrument.modes": Artifact("earnest.instrument-modes.v1",
+                {"kind": kind, "frequencies_hz": frequencies,
+                 "mode_metadata": modes if kind == "ideal-circular-membrane" else None,
+                 "limits": ["Ideal linear resonator only; no excitation, body, radiation, dynamics or identification."]},
+                source=context.inputs["instrument.model"].source)}
 
 
 class RoomRenderComponent:
@@ -304,7 +372,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):
