@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added finite-window C50, C80, D50 and center-time energy diagnostics per modeled source/listener band, with boundary and zero-energy checks.
+
+## Local build 8a9f011 — 2026-11-03
+
 - Added optional air absorption to Sabine/Eyring decay, decay fitting and the existing diffuse energy approximation, using the same `4mV` correction. Added equation, air-only and fit-consistency checks.
 
 ## Local build 1102fb3 — 2026-11-03

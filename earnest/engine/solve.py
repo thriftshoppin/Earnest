@@ -9,6 +9,7 @@ import numpy as np
 from .room import BANDS_HZ, RoomSpec
 from .shoebox import image_paths
 from .physics import air_absorption_db_per_m
+from .energy_metrics import energy_time_metrics
 from ..dsp import bandpass_fft
 
 
@@ -120,6 +121,10 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
                 # optional source spectrum in dB; independent sources add in power.
                 power = float(np.sum(band_ir[band] ** 2))
                 spectrum_db.append(10.0 * math.log10(max(power, 1e-30)) + source.level_db[band])
+            # Include the fractional direct impulse beginning at floor(delay * fs).
+            arrival_index = min(int(math.floor(direct.delay_s * fs)), band_ir.shape[1] - 1)
+            energy_diagnostics = [{"hz": center, **energy_time_metrics(band_ir[i], int(fs), arrival_index)}
+                                  for i, center in enumerate(BANDS_HZ)]
             first = paths[0]
             reflections = [p for p in paths if p is not first]
             all_paths.append({"source_id": source.id, "receiver_id": receiver.id,
@@ -133,6 +138,7 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
                                  "reflection_density_per_s": len(reflections) / max(last_path_s, 1e-12),
                                  "band_energy_db": spectrum_db,
                                  "diffuse_tail_by_band": late_fields,
+                                 "energy_time_metrics_by_band": energy_diagnostics,
                                  "band_ir": {str(b): band_ir[i].tolist() for i, b in enumerate(BANDS_HZ)}})
 
     # Independent sources add as power at each receiver. Source correlation is deliberately
@@ -166,7 +172,7 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
         "model_limits": [
             "Rectangular shoebox geometry only; no imported mesh, occlusion, diffraction, or edge scattering.",
             "Diffuse late tail uses a statistical reverberant-energy estimate, not directional ray tracing or a measured decay fit.",
-            "Band impulse responses are separate and are not phase-calibrated into a full-band waveform.",
+            "Band impulse responses are separate and are not phase-calibrated into a full-band waveform; energy-time diagnostics are modeled finite-window estimates, not standards-compliant measured values.",
             "Low-frequency modal frequencies are not synthesized; correlated-source cross terms are not included.",
             "Pressure gains are normalized to each source-receiver direct path; absolute SPL needs source and calibration data.",
             "When enabled, air absorption affects explicit paths and diffuse-field decay estimates; ideal frequency-independent directivity affects explicit paths only. Humidity effects on sound speed are not modeled. Measured RT60 fitting does not recover unique geometry or materials."

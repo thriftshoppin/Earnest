@@ -278,3 +278,23 @@ absorption is zero; no finite decay is reported when both loss mechanisms vanish
 See [AFMG EASE, room acoustics calculation](https://www.afmg.eu/sites/default/files/2025-12/EASE_5-TE_UsersGuide.pdf)
 for the formula and coefficient convention. The estimates assume a diffuse field;
 they do not predict individual late paths or calibrated SPL.
+
+
+## Modeled energy-time diagnostics (November 2026)
+
+For each modeled band IR, the known direct arrival identifies the first sample
+`n0=floor(t_direct * fs)` of the fractional direct impulse. Define
+`e[n]=h[n]^2`, `E_early(T)=sum e[n]` for samples `n0 <= n < n0+ceil(T fs)`,
+and `E_late(T)=sum e[n]` for the remaining finite response. The solver reports
+`C50=10 log10(E_early(.05)/E_late(.05))`, `C80` with `.08`,
+`D50=E_early(.05)/(E_early(.05)+E_late(.05))`, and
+`Ts=sum((n-n0)e[n])/(fs sum(e[n]))`. A zero total or zero early/late term
+makes the corresponding ratio undefined; it is serialized as `null` and the
+energy terms are retained.
+
+These are finite-window predictions from the current separately modeled band
+IRs. Their onset is known from the simulated path and rounded to a sample;
+they have no measured noise-floor correction, and they are not claims of
+ISO-compliant measurements. The solver may truncate long tails at eight seconds.
+See [Acoustical Society of America on C80](https://acoustics.org/pressroom/httpdocs/154th/paek.html)
+and [phonometry's room-acoustics implementation and equations](https://docs.jmrp.io/phonometry/reference/theory/rooms-buildings/).

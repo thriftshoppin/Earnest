@@ -154,3 +154,7 @@ resulting decay depends on the ISO model's environmental validity. The diffuse
 energy target remains an approximation, the late tail remains stochastic, and
 source/receiver directionality is not modeled in that tail. With air disabled,
 previous decay and fitting behavior is preserved.
+
+## Modeled energy-time diagnostics
+
+Each source/receiver pair now includes C50, C80, D50 and center-time estimates by solver band, with explicit early and late energies. See the [equation sheet](ROOM_SOLVER_MATH.md) for definitions, sample boundaries, undefined values, and the distinction from measured room parameters.
