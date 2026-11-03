@@ -38,7 +38,7 @@ const server=http.createServer((req,res)=>{
     fs.createReadStream(path.join(ROOT,'inbox','rooms','Union-Stairs.room.json')).on('error',()=>res.destroy()).pipe(res);return;
   }
   const m=u.pathname.match(/^\/model\/(v_male|v_female)\/(head|eyes|eyebrows|teeth)\.glb$/);
-  if(m){ const file=path.join(PACKS,m[1],m[2]+'.glb');res.setHeader('Content-Type','model/gltf-binary');fs.createReadStream(file).on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end()}).pipe(res);return; }
+  if(m){ const bundled=path.join(__dirname,'models',m[1],m[2]+'.glb');const file=fs.existsSync(bundled)?bundled:path.join(PACKS,m[1],m[2]+'.glb');res.setHeader('Content-Type','model/gltf-binary');fs.createReadStream(file).on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end()}).pipe(res);return; }
   let item=staticFiles.get(u.pathname);
   if(!item){res.writeHead(404);res.end('Not found');return;}
   res.setHeader('Content-Type',item[1]);fs.createReadStream(path.join(__dirname,item[0])).on('error',()=>{if(!res.headersSent)res.writeHead(404);res.end()}).pipe(res);

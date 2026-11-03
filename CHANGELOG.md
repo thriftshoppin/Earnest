@@ -2,6 +2,11 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — Viewer head models
+
+- Bundled the two local LipScan head files for the live viewer and updated its server to prefer bundled models, with the previous external pack path as a fallback. VM application updates include the bundled heads.
+- Added the project owner's description of their provenance and noted the conflicting older local pack metadata in `live/models/README.md`. Provenance has not been independently verified from creation records.
+
 ## Phase 8 — Source separation, transcription and VM update
 
 ### Local build bf5c8fe — 2026-11-03
