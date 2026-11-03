@@ -425,6 +425,68 @@ def cmd_instrument_identify(a):
     return 0
 
 
+def cmd_hypothesis_evaluate(a):
+    import hashlib
+    import soundfile as sf
+    from .engine import Artifact, EngineError, create_engine
+    from .engine.hypothesis import read_note_events
+    def digest(path):
+        h = hashlib.sha256()
+        with Path(path).open('rb') as f:
+            for block in iter(lambda: f.read(1024*1024), b''): h.update(block)
+        return h.hexdigest()
+    try:
+        reference, rate = sf.read(a.reference, dtype='float64', always_2d=True)
+        stems = []
+        for name in a.stem:
+            audio, source_rate = sf.read(name, dtype='float64', always_2d=True)
+            if source_rate != rate:
+                raise ValueError('stem %s has sample rate %s, expected %s; resample and align explicitly' % (name, source_rate, rate))
+            stems.append(audio)
+        notes = read_note_events(a.notes) if a.notes else None
+        result = create_engine().execute(('audio.hypothesis_evaluate',), {
+            'audio.reference': Artifact('earnest.audio-samples.v1', {'samples': reference, 'sample_rate_hz': int(rate)}, source=str(Path(a.reference).resolve())),
+            'audio.stems': Artifact('earnest.audio-stems.v1', stems),
+            'audio.note_events': Artifact('earnest.note-events.v1', notes)
+        }, {'audio.hypothesis_evaluate': {'max_harmonics': a.harmonics, 'tolerance_cents': a.tolerance_cents}})
+        report = result.artifacts['audio.hypothesis_evaluation'].value
+        report['inputs'] = {'reference': {'path': str(Path(a.reference).resolve()), 'sha256': digest(a.reference)},
+                            'stems': [{'path': str(Path(p).resolve()), 'sha256': digest(p)} for p in a.stem],
+                            'notes': {'path': str(Path(a.notes).resolve()), 'sha256': digest(a.notes)} if a.notes else None}
+        report['note_hypothesis'] = notes
+        out = Path(a.out); out.mkdir(parents=True, exist_ok=False)
+        sf.write(str(out/'residual.wav'), result.artifacts['audio.residual'].value['samples'], rate, subtype='FLOAT')
+        (out/'evaluation.json').write_text(json.dumps(report, indent=2, allow_nan=False)+'\n', encoding='utf-8')
+        print('hypothesis-evaluate: report and residual -> %s' % out.resolve())
+    except (OSError, ValueError, TypeError, RuntimeError, EngineError) as exc:
+        raise SystemExit('hypothesis-evaluate: %s' % exc)
+    return 0
+
+
+def cmd_hypothesis_rank(a):
+    import hashlib
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        paths = [Path(name) for name in a.reports]
+        contents = [path.read_bytes() for path in paths]
+        reports = [json.loads(data.decode('utf-8-sig')) for data in contents]
+        weights = {key: value for key, value in [('reconstruction', a.weight_reconstruction),
+                   ('spectral', a.weight_spectral), ('complexity', a.weight_complexity)] if value is not None}
+        result = create_engine().execute(('audio.hypothesis_rank',), {
+            'audio.hypothesis_evaluations': Artifact('earnest.hypothesis-evaluations.v1', reports)
+        }, {'audio.hypothesis_rank': {'weights': weights}}).artifacts['audio.hypothesis_ranking'].value
+        for row in result['ranked']:
+            i = row['input_index']
+            row['evaluation'] = {'path': str(paths[i].resolve()), 'sha256': hashlib.sha256(contents[i]).hexdigest()}
+        with Path(a.out).open('x', encoding='utf-8') as output:
+            json.dump(result, output, indent=2, allow_nan=False)
+            output.write('\n')
+        print('hypothesis-rank: ranking -> %s' % Path(a.out).resolve())
+    except (OSError, ValueError, TypeError, EngineError) as exc:
+        raise SystemExit('hypothesis-rank: %s' % exc)
+    return 0
+
+
 def cmd_separate(a):
     from .engine import Artifact, EngineError, create_engine
     try:
@@ -1215,6 +1277,21 @@ def main(argv=None):
     inst_identify.add_argument("audio")
     inst_identify.add_argument("--model", required=True)
     inst_identify.set_defaults(fn=cmd_instrument_identify)
+    hypothesis = sub.add_parser('hypothesis-evaluate', help='evaluate aligned stems and optional note hypotheses')
+    hypothesis.add_argument('reference', help='reference mix')
+    hypothesis.add_argument('--stem', action='append', required=True, help='aligned candidate stem; repeat for each stem')
+    hypothesis.add_argument('--notes', help='Basic Pitch CSV or earnest.note-events.v1 JSON')
+    hypothesis.add_argument('--out', required=True, help='new output directory')
+    hypothesis.add_argument('--harmonics', type=int, default=8, help='ideal harmonics per note (default 8)')
+    hypothesis.add_argument('--tolerance-cents', type=float, default=50, help='partial matching tolerance in cents (default 50)')
+    hypothesis.set_defaults(fn=cmd_hypothesis_evaluate)
+    ranking = sub.add_parser('hypothesis-rank', help='rank comparable evaluations using explicit weights')
+    ranking.add_argument('reports', nargs='+', help='evaluation.json files')
+    ranking.add_argument('--weight-reconstruction', type=float)
+    ranking.add_argument('--weight-spectral', type=float)
+    ranking.add_argument('--weight-complexity', type=float, help='penalty per note event per second')
+    ranking.add_argument('--out', required=True, help='new ranking JSON file')
+    ranking.set_defaults(fn=cmd_hypothesis_rank)
     separate = sub.add_parser("separate", help="estimate four stems using an optional Demucs backend")
     separate.add_argument("audio", help="input recording")
     separate.add_argument("--out", required=True, help="new output directory")

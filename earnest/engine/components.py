@@ -111,6 +111,38 @@ class SoundFieldSpectrumComponent:
                  source=context.inputs["soundfield.input"].source, notes=tuple(result["limits"]))}
 
 
+class HypothesisEvaluationComponent:
+    name = "audio.hypothesis_evaluate"
+    requires = ("audio.reference", "audio.stems", "audio.note_events")
+    provides = ("audio.hypothesis_evaluation", "audio.residual")
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .hypothesis import evaluate
+        try:
+            reference = context.inputs['audio.reference'].value
+            report, residual = evaluate(reference['samples'], context.inputs['audio.stems'].value,
+                                        reference['sample_rate_hz'], context.inputs['audio.note_events'].value,
+                                        **dict(context.options))
+        except (TypeError, KeyError, ValueError) as exc:
+            raise EngineError('audio.hypothesis_evaluate: %s' % exc) from exc
+        return {'audio.hypothesis_evaluation': Artifact(report['schema'], report, notes=tuple(report['limits'])),
+                'audio.residual': Artifact('earnest.audio-samples.v1', {'samples': residual, 'sample_rate_hz': reference['sample_rate_hz']})}
+
+
+class HypothesisRankingComponent:
+    name = 'audio.hypothesis_rank'
+    requires = ('audio.hypothesis_evaluations',)
+    provides = ('audio.hypothesis_ranking',)
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .hypothesis import rank_evaluations
+        try:
+            result = rank_evaluations(context.inputs['audio.hypothesis_evaluations'].value, context.options.get('weights', {}))
+        except (TypeError, ValueError) as exc:
+            raise EngineError('audio.hypothesis_rank: %s' % exc) from exc
+        return {'audio.hypothesis_ranking': Artifact(result['schema'], result, notes=tuple(result['limits']))}
+
+
 class SeparationComponent:
     name = "audio.separate"
     requires = ("audio.file",)
@@ -502,7 +534,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), TranscriptionComponent(), SeparationComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), HypothesisEvaluationComponent(), HypothesisRankingComponent(), TranscriptionComponent(), SeparationComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

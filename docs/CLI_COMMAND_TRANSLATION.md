@@ -211,3 +211,7 @@ This direct form is a future CLI shape, not a claim about the current command pa
 6. Should analysis fitting be allowed to vary source/receiver positions when the room file marks them as inferred, or should those remain fixed until explicitly unlocked?
 
 These choices should be settled before wiring user-facing translations into the engine controls.
+
+## Evaluate and rank model hypotheses
+
+See [hypothesis evaluation](HYPOTHESIS_EVALUATION.md) for input format, alignment requirements, equations, output artifacts and complete examples. `hypothesis-evaluate` measures an aligned reference against one or more stems and optional note events; `hypothesis-rank` compares reports using explicitly supplied weights.

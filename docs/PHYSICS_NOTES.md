@@ -250,3 +250,7 @@ This is mid/side stereo processing, not physical source positioning or an
 ears/head model; widening can increase peaks and the current ceiling is a hard
 clamp. Offline tests checked mono, unity, widened, and unchanged default behavior;
 no live listening test has been performed.
+
+## Hypothesis measurements
+
+The reconstruction residual and harmonic peak-support equations, explicit assumptions, and weighted ranking formula are documented in [hypothesis evaluation](HYPOTHESIS_EVALUATION.md). Peak-support uses squared detected peak amplitudes as a proxy and is not a complete Parseval energy calculation. It does not attribute overlapping partials to sources.

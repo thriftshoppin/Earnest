@@ -2,6 +2,13 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — Hypothesis evidence integration
+
+- Added `audio.hypothesis_evaluate` and `hypothesis-evaluate` to compare an aligned sum of candidate stems with the original and save the residual, reconstruction measurements, input hashes and optional normalized note events. Basic Pitch CSV and versioned note-event JSON are supported.
+- Added a time-windowed harmonic peak-support measurement with configurable harmonic count and cents tolerance. The reported peak-power proxy is not total signal energy or an identification result; unavailable quantities remain null.
+- Added `audio.hypothesis_rank` and `hypothesis-rank`, requiring explicit weights and comparable reference hashes and formats. Scores combine chosen reconstruction, spectral and note-rate terms and are not calibrated probabilities.
+- Documented equations, formats, usage, evidence limits and the remaining room, timing and iterative analysis work. Five focused tests cover known tones, incorrect timing, silence, alignment, model CSV input, ranking and CLI behavior; the complete suite passed 76 tests. Existing Demucs and Basic Pitch outputs were also evaluated together on one generated tone after explicit reference conversion.
+
 ## Unreleased — Viewer head models
 
 - Bundled the two local LipScan head files for the live viewer and updated its server to prefer bundled models, with the previous external pack path as a fallback. VM application updates include the bundled heads.
