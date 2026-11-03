@@ -23,7 +23,7 @@ public sealed class AdvancedMix : Form {
         AddRow("CENTER REINFORCEMENT", center, centerValue, 0, 200, 0, 90);
         AddRow("MASTER GAIN", master, masterValue, 0, 250, 100, 160);
         AddRow("PEAK CEILING", ceiling, ceilingValue, 1, 100, 10, 230);
-        var note = new Label { Text = "Center boosts shared L/R, not vocals alone. Ceiling is a hard clamp. Enable ROOM and EQ on the main panel; shape changes restart the bridge.", Left = 18, Top = 305, Width = 490, Height = 42, ForeColor = Color.LightGray };
+        var note = new Label { Text = "Center boosts shared L/R, not vocals alone. Ceiling is a hard clamp. Room changes prepare a new profile and crossfade; endpoint changes restart the bridge.", Left = 18, Top = 305, Width = 490, Height = 42, ForeColor = Color.LightGray };
         Controls.Add(note);
         int y = 355;
         string[] keys = { "Reverb", "Reverb size", "Decay", "Reverb tone", "Reverb clarity", "Smoothness", "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz" };

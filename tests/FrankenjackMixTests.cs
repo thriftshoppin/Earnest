@@ -51,6 +51,35 @@ internal static class FrankenjackMixTests {
         }
         return Math.Sqrt(outputEnergy/inputEnergy);
     }
+    static void TestRoomCrossfade() {
+        string zero=Path.Combine(Path.GetTempPath(),"earnest-zero-"+Guid.NewGuid().ToString("N")+".erir");
+        try {
+            using(var writer=new BinaryWriter(File.Create(zero))) {
+                writer.Write(new char[]{'E','R','I','R'}); writer.Write(1); writer.Write(48000); writer.Write(2); writer.Write(1); writer.Write(0f); writer.Write(0f);
+            }
+            var source=new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(48000,2));
+            source.BufferDuration=TimeSpan.FromSeconds(2);
+            var provider=new SwitchingConvolver(source,profile,150);
+            provider.TargetGain=1; provider.TargetCeiling=1;
+            var input=new float[512*2]; for(int i=0;i<input.Length;i++) input[i]=.04f;
+            var inputBytes=new byte[input.Length*4]; Buffer.BlockCopy(input,0,inputBytes,0,inputBytes.Length);
+            var result=new byte[inputBytes.Length]; var samples=new float[input.Length];
+            for(int i=0;i<30;i++) { source.AddSamples(inputBytes,0,inputBytes.Length); provider.Read(result,0,result.Length); }
+            bool rejected=false;
+            try { provider.RequestProfile(zero+".missing"); } catch(IOException) { rejected=true; }
+            if(!rejected) { Console.WriteLine("FAIL missing update rejected"); failures++; } else Console.WriteLine("PASS missing update rejected");
+            provider.RequestProfile(zero);
+            float previous=.04f, maxJump=0;
+            for(int block=0;block<60;block++) {
+                source.AddSamples(inputBytes,0,inputBytes.Length); provider.Read(result,0,result.Length);
+                Buffer.BlockCopy(result,0,samples,0,result.Length);
+                for(int i=0;i<samples.Length;i+=2) { maxJump=Math.Max(maxJump,Math.Abs(samples[i]-previous)); previous=samples[i]; }
+            }
+            Near("crossfade reaches new room",previous,0,.0001f);
+            if(maxJump>.001f) { Console.WriteLine("FAIL room transition discontinuity " + maxJump); failures++; }
+            else Console.WriteLine("PASS room transition max jump " + maxJump);
+        } finally { if(File.Exists(zero)) File.Delete(zero); }
+    }
     static int Main() {
         profile=Path.Combine(Path.GetTempPath(),"earnest-test-"+Guid.NewGuid().ToString("N")+".erir");
         try {
@@ -61,6 +90,7 @@ internal static class FrankenjackMixTests {
                 Near("EQ center +6 dB band " + band,(float)FilterGainAtCenter(band,6),(float)Math.Pow(10,6.0/20),.015f);
                 Near("EQ center -6 dB band " + band,(float)FilterGainAtCenter(band,-6),(float)Math.Pow(10,-6.0/20),.015f);
             }
+            TestRoomCrossfade();
             double unityDirect=ToneRms(true,false), boostedDirect=ToneRms(true,true);
             Near("direct EQ +6 dB at center frequency",(float)(boostedDirect/unityDirect),(float)Math.Pow(10,6.0/20),.03f);
             double unityWet=ToneRms(false,false), isolatedWet=ToneRms(false,true);

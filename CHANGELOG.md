@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added in-stream replacement room profiles with a 120 ms warm-up and 150 ms linear crossfade, plus offline continuity and invalid-profile checks. Endpoint changes still restart the bridge; live behavior and CPU headroom remain unverified.
+
+## Local build c87e84f — 2026-11-03
+
 - Added a saved room selector to Frankenjack Advanced Mix; room changes still rebuild and restart the bridge. Offline checks cover the selector and missing-file handling, not live switching.
 
 ## Local build 489e0d8 — 2026-11-03

@@ -333,6 +333,81 @@ internal sealed class ConvolutionProvider : IWaveProvider
     }
 }
 
+// Construct replacement filters on the control thread; the audio thread feeds
+// both with the same input and blends them without reopening either endpoint.
+internal sealed class SwitchingConvolver : IWaveProvider
+{
+    sealed class Slot {
+        internal readonly BufferedWaveProvider Buffer;
+        internal readonly ConvolutionProvider Convolver;
+        internal Slot(WaveFormat format, string path) {
+            Buffer = new BufferedWaveProvider(format);
+            Buffer.BufferDuration = TimeSpan.FromSeconds(1);
+            Convolver = new ConvolutionProvider(Buffer, path);
+        }
+    }
+    readonly BufferedWaveProvider source;
+    Slot current, next, pending;
+    int warmFrames, fadePosition;
+    readonly int warmLength, fadeLength;
+    byte[] incoming = new byte[0], left = new byte[0], right = new byte[0];
+    float[] oldSamples = new float[0], newSamples = new float[0];
+    internal volatile float TargetGain=1f, TargetDry=0f, TargetCenter=0f, TargetMaster=1f, TargetCeiling=.1f, TargetWidth=1f;
+    internal float OutputLimit=1f;
+    internal readonly ReflectionEq Eq, DirectEq;
+    public WaveFormat WaveFormat { get { return source.WaveFormat; } }
+    internal SwitchingConvolver(BufferedWaveProvider source, string path, int fadeMilliseconds=150) {
+        this.source=source;
+        current=new Slot(WaveFormat,path);
+        Eq=new ReflectionEq(WaveFormat.Channels,WaveFormat.SampleRate);
+        DirectEq=new ReflectionEq(WaveFormat.Channels,WaveFormat.SampleRate);
+        warmLength=(int)(WaveFormat.SampleRate*.12); // prime the direct delay and early reflections
+        fadeLength=Math.Max(1,(int)(WaveFormat.SampleRate * fadeMilliseconds / 1000.0));
+    }
+    internal void RequestProfile(string path) {
+        var prepared=new Slot(WaveFormat,path); // invalid profiles leave the current room intact
+        Interlocked.Exchange(ref pending,prepared);
+    }
+    void Apply(Slot slot) {
+        var p=slot.Convolver;
+        p.TargetGain=TargetGain; p.TargetDry=TargetDry; p.TargetCenter=TargetCenter;
+        p.TargetMaster=TargetMaster; p.TargetCeiling=TargetCeiling; p.TargetWidth=TargetWidth; p.OutputLimit=OutputLimit;
+        p.Eq.Target=Eq.Target; p.DirectEq.Target=DirectEq.Target;
+    }
+    public int Read(byte[] buffer,int offset,int count) {
+        int frameBytes=WaveFormat.Channels*4;
+        if (incoming.Length<count) incoming=new byte[count];
+        int read=source.Read(incoming,0,count), done=0;
+        while(done<read) {
+            int bytes=Math.Min(read-done,512*frameBytes);
+            bytes-=bytes%frameBytes;
+            if(bytes==0) break;
+            int n=bytes/4;
+            if(left.Length<bytes) { left=new byte[bytes]; right=new byte[bytes]; oldSamples=new float[n]; newSamples=new float[n]; }
+            if(next==null) {
+                next=Interlocked.Exchange(ref pending,null);
+                if(next!=null) { warmFrames=0; fadePosition=0; }
+            }
+            Apply(current); current.Buffer.AddSamples(incoming,done,bytes); current.Convolver.Read(left,0,bytes);
+            if(next==null) Buffer.BlockCopy(left,0,buffer,offset+done,bytes);
+            else {
+                Apply(next); next.Buffer.AddSamples(incoming,done,bytes); next.Convolver.Read(right,0,bytes);
+                Buffer.BlockCopy(left,0,oldSamples,0,bytes); Buffer.BlockCopy(right,0,newSamples,0,bytes);
+                for(int i=0;i<n;i+=WaveFormat.Channels) {
+                    float weight=0f;
+                    if(warmFrames<warmLength) warmFrames++;
+                    else { weight=Math.Min(1f,fadePosition/(float)fadeLength); fadePosition++; }
+                    for(int c=0;c<WaveFormat.Channels;c++) oldSamples[i+c]+=weight*(newSamples[i+c]-oldSamples[i+c]);
+                }
+                Buffer.BlockCopy(oldSamples,0,buffer,offset+done,bytes);
+                if(fadePosition>=fadeLength) { current=next; next=null; }
+            }
+            done+=bytes;
+        }
+        return done;
+    }
+}
+
 internal static class Program
 {
     private static volatile bool _stopping;
@@ -448,7 +523,8 @@ internal static class Program
                         capture.DataAvailable += (sender, eventArgs) => buffer.AddSamples(eventArgs.Buffer, 0, eventArgs.BytesRecorded);
                         capture.RecordingStopped += (sender, eventArgs) => { if (eventArgs.Exception != null) Console.Error.WriteLine("CAPTURE STOPPED: " + eventArgs.Exception.Message); _stopping = true; };
                         player.PlaybackStopped += (sender, eventArgs) => { if (eventArgs.Exception != null) Console.Error.WriteLine("PLAYBACK STOPPED: " + eventArgs.Exception.Message); _stopping = true; };
-                        var convolver = new ConvolutionProvider(buffer, Required(args, "--ir-profile"));
+                        var convolver = new SwitchingConvolver(buffer, Required(args, "--ir-profile"));
+                        string profileUpdateFile = Argument(args, "--profile-update-file"), lastProfileUpdate = null;
                         string gainFile = Argument(args, "--gain-file");
                         string mixFile = Argument(args, "--mix-file");
                         string wetEqFile = Argument(args, "--wet-eq-file");
@@ -467,6 +543,14 @@ internal static class Program
                         player.Play(); capture.StartRecording();
                         Console.WriteLine("BRIDGE READY\t" + input.FriendlyName + " -> " + output.FriendlyName + "\t" + format);
                         while (!_stopping) {
+                            if (profileUpdateFile != null) try {
+                                string replacement=File.ReadAllText(profileUpdateFile).Trim();
+                                if (replacement.Length>0 && replacement!=lastProfileUpdate) {
+                                    lastProfileUpdate=replacement;
+                                    try { convolver.RequestProfile(replacement); Console.WriteLine("ROOM UPDATE PREPARED: " + replacement); }
+                                    catch (Exception ex) { Console.Error.WriteLine("ROOM UPDATE FAILED: " + ex.Message); }
+                                }
+                            } catch (IOException) { } catch (UnauthorizedAccessException) { }
                             if (gainFile != null) try {
                                 float gain;
                                 if (Single.TryParse(File.ReadAllText(gainFile).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out gain) && !Single.IsNaN(gain) && !Single.IsInfinity(gain))

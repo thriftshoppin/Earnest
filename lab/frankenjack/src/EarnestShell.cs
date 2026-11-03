@@ -37,8 +37,8 @@ public sealed class EarnestControls {
 }
 public sealed class EarnestEngine {
     readonly object gate = new object(); readonly System.Threading.Timer timer;
-    readonly string root, profile, host, gainFile, eqFile, widthFile; string room; Process bridge; bool active, building; int generation;
-    int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100, width=50; bool bypass; string input, output, error;
+    readonly string root, profile, host, gainFile, eqFile, widthFile, profileUpdateFile; string room; Process bridge; bool active, building; int generation;
+    int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100, width=50; bool bypass; string input, output, error, activeInput, activeOutput;
     readonly float[] wetEq = new float[7];
     public readonly EarnestControls Dsp;
     public EarnestEngine() {
@@ -50,6 +50,7 @@ public sealed class EarnestEngine {
         gainFile=Path.Combine(Path.GetDirectoryName(profile),"wet-gain.txt");
         eqFile=Path.Combine(Path.GetDirectoryName(profile),"reflection-eq.txt");
         widthFile=Path.Combine(Path.GetDirectoryName(profile),"stage-width.txt");
+        profileUpdateFile=Path.Combine(Path.GetDirectoryName(profile),"profile-update.txt");
         Dsp=new EarnestControls(this); timer=new System.Threading.Timer(delegate { Build(); },null,Timeout.Infinite,Timeout.Infinite);
     }
     public bool Running { get { lock(gate) return active && (building || (bridge != null && !bridge.HasExited)); } }
@@ -112,11 +113,20 @@ public sealed class EarnestEngine {
             using(var p=Process.Start(psi)) { string stdout=p.StandardOutput.ReadToEnd(); string stderr=p.StandardError.ReadToEnd(); p.WaitForExit(); if(p.ExitCode!=0) throw new Exception("Room compilation failed: " + stderr + stdout); }
             lock(gate) {
                 if (!active || id!=generation) return;
+                if (bridge!=null && !bridge.HasExited && source==activeInput && dest==activeOutput) {
+                    string updateTemp=profileUpdateFile+"."+id+".tmp";
+                    File.WriteAllText(updateTemp,temp);
+                    if(File.Exists(profileUpdateFile)) File.Replace(updateTemp,profileUpdateFile,null);
+                    else File.Move(updateTemp,profileUpdateFile);
+                    error=null;
+                    return;
+                }
                 if (bridge!=null && !bridge.HasExited) { bridge.Kill(); bridge.WaitForExit(); }
                 WriteGain(); WriteEq(); WriteWidth();
-                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --width-file "+Q(widthFile)+" --output-limit 1");
+                if(File.Exists(profileUpdateFile)) File.Delete(profileUpdateFile);
+                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --profile-update-file "+Q(profileUpdateFile)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --width-file "+Q(widthFile)+" --output-limit 1");
                 run.WorkingDirectory=Path.GetDirectoryName(host); run.UseShellExecute=false; run.CreateNoWindow=false;
-                bridge=Process.Start(run); error=null;
+                bridge=Process.Start(run); activeInput=source; activeOutput=dest; error=null;
             }
         } catch(Exception ex) { lock(gate) { if(active && id==generation) { error=ex.Message; active=bridge!=null && !bridge.HasExited; } } }
         finally { lock(gate) { building=false; if(active && id!=generation) timer.Change(900,Timeout.Infinite); } }
