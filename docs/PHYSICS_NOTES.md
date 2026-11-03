@@ -103,3 +103,29 @@ redistribution. The current room solver accepts arbitrary source positions and
 ideal omni, cardioid and figure-eight patterns, which can represent simplified
 stage speakers, but it has no measured loudspeaker directivity, frequency response,
 crossover, cabinet, amplifier, or subwoofer-array model.
+
+### Modeling and exporting rooms in Room Studio
+
+Run `Open-Room-Studio.cmd` in the repository or `earnest room-editor --open`.
+Set dimensions, environment, six surface materials, octave-band absorption and
+scattering, source/listener positions and direction, and the solver controls.
+Drag a point in the plan to move it; drag the right or top handle to resize the
+rectangular room. Select a point and use arrow keys for 0.1 m nudges; Shift moves
+1 m; Escape deselects. Height is edited numerically. Validation catches points
+outside the room after resizing. The decay chart is an estimate, not a recorded
+response. No sound is played by the editor.
+
+Export room writes a full `earnest.room.v1` JSON document. Export instructions
+writes a lossless `earnest.room-instructions.v1` JSON list of declarative `set`
+operations; reconstruct it with:
+
+```
+earnest room-from-instructions earnest-room-instructions.json --out room.json
+```
+
+The command validates the reconstructed document and refuses to overwrite an
+existing output. The list includes the complete top-level fields, including
+unrecognized metadata; it is not an executable shell script. Room Studio is a
+plain JavaScript/canvas UI backed by the existing local Python solver. It does
+not yet support freeform walls, arbitrary geometry, dragging height, real-time
+sound-field rendering, or direct application of rooms to Frankenjack.

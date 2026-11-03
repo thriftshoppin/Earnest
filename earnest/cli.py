@@ -265,6 +265,22 @@ def cmd_room_template(a):
     return 0
 
 
+def cmd_room_from_instructions(a):
+    from .room_instructions import apply_instructions
+    try:
+        plan = json.loads(Path(a.instructions).read_text(encoding="utf-8-sig"))
+        document = apply_instructions(plan)
+        path = Path(a.out)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("x", encoding="utf-8") as f:
+            json.dump(document, f, indent=2, allow_nan=False)
+            f.write("\n")
+        print("room-from-instructions: wrote %s" % path)
+    except (OSError, ValueError, TypeError) as exc:
+        raise SystemExit("room-from-instructions: %s" % exc)
+    return 0
+
+
 def cmd_room_editor(a):
     from .room_editor import serve
     try:
@@ -961,6 +977,10 @@ def main(argv=None):
     rt = sub.add_parser("room-template", help="write a starter custom rectangular-room JSON file")
     rt.add_argument("file", help="destination room JSON; existing files are not overwritten")
     rt.set_defaults(fn=cmd_room_template)
+    instructions = sub.add_parser("room-from-instructions", help="build a room from a Room Studio instruction list")
+    instructions.add_argument("instructions", help="earnest.room-instructions.v1 JSON file")
+    instructions.add_argument("--out", required=True, help="new room JSON file")
+    instructions.set_defaults(fn=cmd_room_from_instructions)
     editor = sub.add_parser("room-editor", help="open the local visual room editor using the shared physics engine")
     editor.add_argument("--port", type=int, default=8775)
     editor.add_argument("--open", action="store_true", help="open the editor in the default browser")

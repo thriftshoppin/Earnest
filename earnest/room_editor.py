@@ -49,7 +49,7 @@ def create_server(port: int = 8775) -> ThreadingHTTPServer:
             if not self._valid_host() or self.headers.get("Origin", "").lower() not in (f"http://127.0.0.1:{actual_port}", f"http://localhost:{actual_port}"):
                 self.send_error(403)
                 return
-            if self.path not in ("/api/validate", "/api/solve"):
+            if self.path not in ("/api/validate", "/api/solve", "/api/instructions"):
                 self.send_error(404)
                 return
             try:
@@ -60,6 +60,9 @@ def create_server(port: int = 8775) -> ThreadingHTTPServer:
                 room = RoomSpec.from_dict(document)
                 result = {"valid": True, "volume_m3": room.volume_m3,
                           "decay_estimates": room.decay_estimates(), "bands_hz": [125, 250, 500, 1000, 2000, 4000, 8000]}
+                if self.path == "/api/instructions":
+                    from .room_instructions import make_instructions
+                    result = make_instructions(document)
                 if self.path == "/api/solve":
                     if len(room.sources) > 4 or len(room.receivers) > 4 or max(room.dimensions) > 100:
                         raise ValueError("interactive solve is limited to four sources, four receivers, and 100 m per dimension; use CLI for other cases")

@@ -1,5 +1,10 @@
 """Exercise the local editor API without starting audio or opening a browser."""
 import json
+import tempfile
+from pathlib import Path
+
+from earnest.room_instructions import make_instructions, apply_instructions
+from earnest.cli import main
 import threading
 import unittest
 import urllib.error
@@ -43,6 +48,24 @@ class RoomEditorTests(unittest.TestCase):
         self.assertEqual(len(solved['pairs']), 2)
         self.assertEqual(solved['interactive_reflection_order'], 0)
         self.assertTrue(all(p['path_count'] == 1 for p in solved['pairs']))
+
+    def test_instructions_roundtrip_and_cli(self):
+        room = json.loads(self.get('/api/template'))
+        room['metadata'] = {'name': 'Custom room', 'extra': [1, 2, 3]}
+        plan = self.post('/api/instructions', room)
+        self.assertEqual(apply_instructions(plan), room)
+        self.assertEqual(make_instructions(room), plan)
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / 'instructions.json'
+            out = Path(tmp) / 'room.json'
+            src.write_text(json.dumps(plan), encoding='utf-8')
+            self.assertEqual(main(['room-from-instructions', str(src), '--out', str(out)]), 0)
+            self.assertEqual(json.loads(out.read_text(encoding='utf-8')), room)
+            with self.assertRaises(SystemExit):
+                main(['room-from-instructions', str(src), '--out', str(out)])
+        plan['instructions'].append(plan['instructions'][0])
+        with self.assertRaises(ValueError):
+            apply_instructions(plan)
 
     def test_invalid_room_and_cross_origin_are_rejected(self):
         room = json.loads(self.get('/api/template'))
