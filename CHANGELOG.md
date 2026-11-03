@@ -2,6 +2,10 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — Elevated VM update launchers
+
+- The full and application-only update launchers check for administrator access, request an elevated window when needed, and retain the window and exit code after setup. They report an error if elevation cannot be obtained. Launcher failure handling was checked with mock processes; elevation still needs confirmation in the guest.
+
 ## Unreleased — Cumulative VM update launcher
 
 - Added a full update launcher that applies the application payload, installs isolated Demucs and Basic Pitch runtimes through uv, and downloads the Demucs model. It requires network access and several GB of guest disk space. Added an app-local Frankenjack launcher and included CUDA documentation in the update. The application payload and full-update success and failure paths were checked with mock components; the full model download has not yet been verified in the VM.

@@ -9,6 +9,25 @@ from pathlib import Path
 
 @unittest.skipUnless(os.name == 'nt', 'Windows VM updater')
 class VMUpdateTests(unittest.TestCase):
+    def test_batch_launchers_keep_failure_visible_and_detect_missing_admin(self):
+        repo=Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory(prefix='earnest launcher ') as tmp:
+            root=Path(tmp); compiler=Path(os.environ['WINDIR'])/'Microsoft.NET/Framework64/v4.0.30319/csc.exe'
+            source=root/'fake.cs'; source.write_text('using System; class P { static int Main(string[] a) { if(Array.IndexOf(a,"-Command")>=0) return Environment.GetEnvironmentVariable("EARNEST_TEST_ADMIN")=="1"?0:1; Console.WriteLine("MOCK UPDATE FAILED"); return 7; } }')
+            built=subprocess.run([str(compiler),'/nologo',f'/out:{root / "powershell.exe"}',str(source)],capture_output=True,text=True)
+            self.assertEqual(built.returncode,0,built.stdout+built.stderr)
+            for name in ('Update-Earnest-VM-Full.cmd','Update-Earnest-VM.cmd'):
+                launcher=root/name; launcher.write_bytes((repo/'lab/vm'/name).read_bytes())
+                env=os.environ.copy(); env['EARNEST_TEST_ADMIN']='1'
+                result=subprocess.run(['cmd','/d','/c',str(launcher),'--elevated'],input='\n',capture_output=True,text=True,env=env,cwd=root)
+                self.assertEqual(result.returncode,7,result.stdout+result.stderr)
+                self.assertIn('Update exit code: 7',result.stdout)
+                self.assertIn('stay open',result.stdout)
+                env['EARNEST_TEST_ADMIN']='0'
+                result=subprocess.run(['cmd','/d','/c',str(launcher),'--elevated'],input='\n',capture_output=True,text=True,env=env,cwd=root)
+                self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+                self.assertIn('not running as administrator',result.stdout)
+
     def test_full_update_orchestrates_models_and_reports_failures(self):
         repo=Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as tmp:
