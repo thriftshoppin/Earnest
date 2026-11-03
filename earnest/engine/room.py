@@ -53,6 +53,7 @@ class EngineControls:
     scattering_scale: tuple[float, ...] = (1.0,) * len(BANDS_HZ)
     diffuse_energy_scale: float = 1.0
     tail_duration_scale: float = 1.0
+    decay_scale: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -187,7 +188,8 @@ class RoomSpec:
             absorption_scale=band_controls("absorption_scale", 1.0, 0.0, 20.0),
             scattering_scale=band_controls("scattering_scale", 1.0, 0.0, 20.0),
             diffuse_energy_scale=_number(control_raw.get("diffuse_energy_scale", 1.0), "engine_controls.diffuse_energy_scale", 0.0, 10.0),
-            tail_duration_scale=_number(control_raw.get("tail_duration_scale", 1.0), "engine_controls.tail_duration_scale", 0.1, 4.0))
+            tail_duration_scale=_number(control_raw.get("tail_duration_scale", 1.0), "engine_controls.tail_duration_scale", 0.1, 4.0),
+            decay_scale=_number(control_raw.get("decay_scale", 1.0), "engine_controls.decay_scale", 0.1, 2.5))
         sources, receivers = points("sources"), points("receivers")
         for source in sources:
             for receiver in receivers:
@@ -236,6 +238,9 @@ class RoomSpec:
             sabine = sabine_constant * self.volume_m3 / total_sabine if total_sabine > 0 else None
             eyring_den = -surface_area * math.log1p(-mean_alpha) + air_area if mean_alpha < 1 else math.inf
             eyring = sabine_constant * self.volume_m3 / eyring_den if eyring_den > 0 and math.isfinite(eyring_den) else (0.0 if mean_alpha == 1 else None)
+            baseline = sabine if self.controls.decay_model == "sabine" else (eyring if eyring is not None else sabine)
+            effective = baseline * self.controls.decay_scale if baseline is not None else None
             out.append({"hz": band, "absorption_area_m2": absorption_area, "mean_absorption": mean_alpha,
-                        "air_absorption_area_m2": air_area, "sabine_rt60_s": sabine, "eyring_rt60_s": eyring})
+                        "air_absorption_area_m2": air_area, "sabine_rt60_s": sabine, "eyring_rt60_s": eyring,
+                        "effective_rt60_s": effective})
         return out

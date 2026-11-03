@@ -342,3 +342,18 @@ not estimated from music. Zero power is floored to -300 dB when a nonzero peak
 exists, while excluded near-source points remain `null`. An entirely zero field
 has no normalizing reference and produces `null` levels. The late field and
 calibrated absolute SPL remain excluded.
+
+
+## Independent decay-time and tail-length dials
+
+The selected physical Sabine/Eyring result is `T_physical`; the engine's
+artistic decay control computes `T_effective = T_physical * decay_scale`,
+where the default is 1 and the range is 0.1 to 2.5. The diffuse-tail pressure
+envelope becomes `a(t) = 10^(-3t/T_effective)`. Consequently, its squared
+energy envelope falls by 60 dB in `T_effective` before finite-duration, noise,
+filtering and implementation effects. `tail_duration_scale` independently
+changes the finite rendered tail duration, subject to the existing eight-second
+cap. It does not alter the envelope slope. The room solution reports both raw
+physical estimates and `effective_rt60_s`. The statistical energy target is
+normalized separately; this is an artistic model, not a claim that scaling
+decay independently corresponds to a physically unique material change.

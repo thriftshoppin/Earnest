@@ -29,15 +29,15 @@ public sealed class EarnestControls {
     readonly EarnestEngine owner; bool bypass;
     public EarnestControls(EarnestEngine owner) { this.owner = owner; }
     public bool Bypass { get { return bypass; } set { bypass=value; owner.SetBypass(value); } }
-    public void Set(float reverb,float width,float depth,float height,float level,float size,float tone,float pre,float clarity,float rw,float smooth,float low,float mid,float high,bool advanced,float[] eq) {
-        owner.SetControls((int)reverb, (int)size, (int)tone, (int)clarity, (int)smooth);
+    public void Set(float reverb,float width,float depth,float height,float level,float size,float tone,float pre,float clarity,float rw,float smooth,float low,float mid,float high,bool advanced,float decay,float[] eq) {
+        owner.SetControls((int)reverb, (int)size, (int)tone, (int)clarity, (int)smooth, (int)decay);
         owner.SetReflectionEq(eq);
     }
 }
 public sealed class EarnestEngine {
     readonly object gate = new object(); readonly System.Threading.Timer timer;
     readonly string root, room, profile, host, gainFile, eqFile; Process bridge; bool active, building; int generation;
-    int wet=100, tail=100, absorption=100, scatter=100, diffusion=100; bool bypass; string input, output, error;
+    int wet=100, tail=100, absorption=100, scatter=100, diffusion=100, decay=100; bool bypass; string input, output, error;
     readonly float[] wetEq = new float[7];
     public readonly EarnestControls Dsp;
     public EarnestEngine() {
@@ -59,10 +59,10 @@ public sealed class EarnestEngine {
         lock(gate) { input=rows[inId].EndpointId; output=rows[outId].EndpointId; active=true; error=null; }
         Schedule();
     }
-    public void SetControls(int w,int t,int a,int s,int d) {
-        t=Math.Max(10,t);
+    public void SetControls(int w,int t,int a,int s,int d,int decayValue) {
+        t=Math.Max(10,t); decayValue=Math.Max(10,Math.Min(250,decayValue));
         bool roomChanged;
-        lock(gate) { if(wet==w && tail==t && absorption==a && scatter==s && diffusion==d) return; roomChanged=tail!=t || absorption!=a || scatter!=s || diffusion!=d; wet=w; tail=t; absorption=a; scatter=s; diffusion=d; WriteGain(); }
+        lock(gate) { if(wet==w && tail==t && absorption==a && scatter==s && diffusion==d && decay==decayValue) return; roomChanged=tail!=t || absorption!=a || scatter!=s || diffusion!=d || decay!=decayValue; wet=w; tail=t; absorption=a; scatter=s; diffusion=d; decay=decayValue; WriteGain(); }
         if(roomChanged) Schedule();
     }
     void WriteGain() {
@@ -85,13 +85,13 @@ public sealed class EarnestEngine {
     public void Schedule() { lock(gate) { if(!active) return; generation++; timer.Change(900,Timeout.Infinite); } }
     static string Q(string s) { return "\"" + s.Replace("\"", "") + "\""; }
     void Build() {
-        int id,w,t,a,s,d; string source,dest;
-        lock(gate) { if(!active || building) { if(active) timer.Change(1000,Timeout.Infinite); return; } building=true; id=generation; w=100; t=tail; a=absorption; s=scatter; d=diffusion; source=input; dest=output; }
+        int id,w,t,a,s,d,dec; string source,dest;
+        lock(gate) { if(!active || building) { if(active) timer.Change(1000,Timeout.Infinite); return; } building=true; id=generation; w=100; t=tail; a=absorption; s=scatter; d=diffusion; dec=decay; source=input; dest=output; }
         string temp=Path.Combine(Path.GetDirectoryName(profile),"room-"+id+".erir");
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(profile));
             if(!File.Exists(room) || !File.Exists(host)) throw new Exception("Earnest room or audio host not found in " + root);
-            var psi=new ProcessStartInfo("python", "-u -m earnest.audio.stagejack "+Q(room)+" "+Q(temp)+" --wet "+w+" --tail "+t+" --absorption "+a+" --scattering "+s+" --diffusion "+d);
+            var psi=new ProcessStartInfo("python", "-u -m earnest.audio.stagejack "+Q(room)+" "+Q(temp)+" --wet "+w+" --tail "+t+" --decay "+dec+" --absorption "+a+" --scattering "+s+" --diffusion "+d);
             psi.WorkingDirectory=root; psi.UseShellExecute=false; psi.CreateNoWindow=true; psi.RedirectStandardOutput=true; psi.RedirectStandardError=true;
             using(var p=Process.Start(psi)) { string stdout=p.StandardOutput.ReadToEnd(); string stderr=p.StandardError.ReadToEnd(); p.WaitForExit(); if(p.ExitCode!=0) throw new Exception("Room compilation failed: " + stderr + stdout); }
             lock(gate) {

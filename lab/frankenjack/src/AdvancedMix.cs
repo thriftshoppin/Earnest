@@ -23,10 +23,10 @@ public sealed class AdvancedMix : Form {
         var note = new Label { Text = "Center boosts shared L/R, not vocals alone. Ceiling is a hard clamp. Enable ROOM and EQ on the main panel; shape changes restart the bridge.", Left = 18, Top = 305, Width = 490, Height = 42, ForeColor = Color.LightGray };
         Controls.Add(note);
         int y = 355;
-        string[] keys = { "Reverb", "Reverb size", "Reverb tone", "Reverb clarity", "Smoothness", "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz" };
-        string[] labels = { "WET FIELD GAIN", "TAIL DURATION SCALE", "ABSORPTION SCALE", "SCATTERING SCALE", "DIFFUSE ENERGY SCALE", "WET EQ 125 Hz", "WET EQ 250 Hz", "WET EQ 500 Hz", "WET EQ 1 kHz", "WET EQ 2 kHz", "WET EQ 4 kHz", "WET EQ 8 kHz" };
+        string[] keys = { "Reverb", "Reverb size", "Decay", "Reverb tone", "Reverb clarity", "Smoothness", "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz" };
+        string[] labels = { "WET FIELD GAIN", "TAIL LENGTH SCALE", "DECAY TIME SCALE", "ABSORPTION SCALE", "SCATTERING SCALE", "DIFFUSE ENERGY SCALE", "WET EQ 125 Hz", "WET EQ 250 Hz", "WET EQ 500 Hz", "WET EQ 1 kHz", "WET EQ 2 kHz", "WET EQ 4 kHz", "WET EQ 8 kHz" };
         for (int i = 0; i < keys.Length; i++) {
-            string key = keys[i]; int min = i < 5 ? (i == 1 ? 10 : 0) : -12, max = i < 5 ? 250 : 12;
+            string key = keys[i]; int min = i < 6 ? (i == 1 || i == 2 ? 10 : 0) : -12, max = i < 6 ? 250 : 12;
             AddEngineRow(labels[i], key, readControl(key), min, max, y, setControl); y += 70;
         }
         AutoScrollMinSize = new Size(0, y + 15);

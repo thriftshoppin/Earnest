@@ -4,6 +4,10 @@ Changes are grouped by local build/commit. Dates are local project dates. Entrie
 
 ## Unreleased — 2026-11-03
 
+- Added an independent decay-time multiplier to the room engine, Room Studio, and Frankenjack Advanced Mix; retained the separate tail cutoff control. Added synthesized decay-slope, profile, adapter and offline UI-binding checks.
+
+## Local build 8fba240 — 2026-11-03
+
 - Added independent, common in-phase and opposite-polarity source assumptions to the room-field viewer, plus validated custom complex correlation matrices in the engine/CLI. Exact cancellation and missing near-source values are represented separately when a nonzero reference exists.
 
 ## Local build 6ce0354 — 2026-11-03

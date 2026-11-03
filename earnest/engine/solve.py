@@ -86,10 +86,7 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
             last_path_s = max((p.delay_s for p in paths), default=0.0)
             tail_start_s = last_path_s + 0.02
             decay_rows = room.decay_estimates()
-            rt_by_band = [row["%s_rt60_s" % room.controls.decay_model] for row in decay_rows]
-            if room.controls.decay_model == "eyring":
-                rt_by_band = [row["eyring_rt60_s"] if row["eyring_rt60_s"] is not None else row["sabine_rt60_s"]
-                              for row in decay_rows]
+            rt_by_band = [row["effective_rt60_s"] for row in decay_rows]
             tail_seconds = [min(max(rt * 1.25, 0.25), 8.0) if rt is not None and rt > 0 else 0.0 for rt in rt_by_band]
             n = max(64, int(math.ceil((tail_start_s + max(tail_seconds, default=0.05)) * fs)))
             band_ir = np.zeros((7, n), dtype=np.float64)
@@ -163,7 +160,8 @@ def solve_room(room: RoomSpec, fs: int = 48000, max_order: int | None = None) ->
                             "absorption_scale": list(room.controls.absorption_scale),
                             "scattering_scale": list(room.controls.scattering_scale),
                             "diffuse_energy_scale": room.controls.diffuse_energy_scale,
-                            "tail_duration_scale": room.controls.tail_duration_scale},
+                            "tail_duration_scale": room.controls.tail_duration_scale,
+                            "decay_scale": room.controls.decay_scale},
         "decay_estimates": room.decay_estimates(),
         "low_frequency_modes_hz": _modal_diagnostics(room.dimensions, c),
         "source_receiver_pairs": pair_results,

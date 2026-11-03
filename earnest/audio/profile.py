@@ -27,7 +27,7 @@ def build_live_profile(solution: dict[str, Any], dry_mix: float = 0.78,
     decay_key = "%s_rt60_s" % controls.get("decay_model", "eyring")
     rt60 = []
     for row in solution.get("decay_estimates", []):
-        value = _finite(row.get(decay_key))
+        value = _finite(row.get("effective_rt60_s")) if "effective_rt60_s" in row else _finite(row.get(decay_key))
         if value is None and decay_key != "sabine_rt60_s":
             value = _finite(row.get("sabine_rt60_s"))
         if value is not None and 0.02 < value < 30:

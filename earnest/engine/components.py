@@ -24,6 +24,8 @@ class RoomParseComponent:
                          "room.engine_controls.decay_model", "late-field decay estimate", ("eyring", "sabine")),
         ControlParameter("diffuse_energy_scale", "Diffuse energy", "x", 0, 10, 1.0,
                          "room.engine_controls.diffuse_energy_scale", "late-field energy calibration"),
+        ControlParameter("decay_scale", "Decay time", "x", 0.1, 2.5, 1.0,
+                         "room.engine_controls.decay_scale", "multiplier applied to modeled late-field RT60"),
         ControlParameter("tail_duration_scale", "Tail duration", "x", 0.1, 4, 1.0,
                          "room.engine_controls.tail_duration_scale", "preview/render duration"),
         ControlParameter("air_absorption_enabled", "Atmospheric absorption", "choice", None, None, "false",

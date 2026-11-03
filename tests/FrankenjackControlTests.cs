@@ -19,7 +19,7 @@ internal static class FrankenjackControlTests {
     [STAThread] static int Main() {
         string path=Path.Combine(Path.GetTempPath(),"earnest-controls-"+Guid.NewGuid().ToString("N")+".txt");
         var values=new Dictionary<string,int>();
-        Func<string,int> read = key => key=="Reverb size"?100:key=="Reverb"?100:0;
+        Func<string,int> read = key => key=="Reverb size"?100:key=="Decay"?100:key=="Reverb"?100:0;
         Action<string,int> write = (key,value) => values[key]=value;
         try {
             using(var panel=new AdvancedMix(read,write,path)) {
@@ -29,8 +29,10 @@ internal static class FrankenjackControlTests {
                 Check(File.ReadAllText(path)=="35,20,100,10","dry and center update bridge file");
                 Move(Find(panel,"Reverb"),80);
                 Move(Find(panel,"Reverb tone"),120);
+                Move(Find(panel,"Decay"),150);
                 Move(Find(panel,"1 kHz"),6);
                 Check(values["Reverb"]==80,"wet control maps to existing engine slider");
+                Check(values["Decay"]==150,"decay time has an independent control");
                 Check(values["Reverb tone"]==120,"absorption maps to existing engine slider");
                 Check(values["1 kHz"]==6,"wet EQ maps to existing engine slider");
                 panel.SyncEngineControl("Reverb",42);

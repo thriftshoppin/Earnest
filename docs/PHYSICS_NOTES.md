@@ -175,3 +175,22 @@ for the equation and limitations.
 ## Source correlation in the viewer
 
 The map now offers independent, common in-phase and two-source opposite-polarity assumptions. The CLI additionally accepts a complex correlation matrix in source order. The color scale is normalized separately for each map; it cannot compare absolute loudness between maps. Details and matrix validation are in the [equation sheet](ROOM_SOLVER_MATH.md).
+
+## Independent decay and tail-length controls
+
+`engine_controls.decay_scale` defaults to 1 and ranges from 0.1 to 2.5.
+The solver keeps the physical Sabine and Eyring estimates unchanged, selects
+the configured estimate, and computes `T_effective = decay_scale * T_physical`.
+The statistical late pressure envelope uses `10^(-3t/T_effective)` and the
+live profile uses the effective value. The separate `tail_duration_scale`
+controls the rendered tail cutoff; it is not a decay-rate control. Both values
+are exposed separately in Room Studio and Frankenjack Advanced Mix.
+
+The stochastic tail is filtered and normalized to the existing energy target;
+the cutoff is capped at eight seconds, so the rendered response is approximate
+and may not contain a full 60 dB decay. Decay fitting currently targets the
+physical estimate before the artistic decay multiplier; set the multiplier to
+100% while fitting to interpret the fitted prediction directly. Frankenjack
+currently rebuilds and restarts its bridge for these changes. Offline checks
+verify generated decay slopes and control bindings; no live audio test has been
+performed for this addition.

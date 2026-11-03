@@ -81,6 +81,7 @@ sealed class MainWindow : Form {
         RegisterSlider("Reverb size", 0, 100, 75); RegisterSlider("Reverb tone", 0, 100, 60); RegisterSlider("Reverb pre-delay", 0, 60, 30); RegisterSlider("Reverb clarity", 0, 100, 50); RegisterSlider("Reverb width", 0, 100, 100); RegisterSlider("Smoothness", 0, 100, 60);
         foreach (string control in new [] { "Reverb", "Reverb size", "Reverb tone", "Reverb clarity", "Smoothness" }) { sliders[control].Maximum = 250; sliders[control].Value = 100; }
         sliders["Reverb size"].Minimum = 10;
+        RegisterSlider("Decay", 10, 250, 100);
         RegisterSlider("Low", -12, 12, 0); RegisterSlider("Mid", -12, 12, 0); RegisterSlider("High", -12, 12, 0);
         foreach (string band in bands) RegisterSlider(band, -12, 12, 0);
         eqView = new EqView { Visible = false, Enabled = false, Size = new Size(1, 1), Font = small };
@@ -179,7 +180,7 @@ sealed class MainWindow : Form {
         float low = eqEnabled ? sliders["Low"].Value : 0;
         float mid = eqEnabled ? sliders["Mid"].Value : 0;
         float high = eqEnabled ? sliders["High"].Value : 0;
-        engine.Dsp.Set(reverb, width, depth, height, level, size, tone, pre, clarity, reverbWidth, smooth, low, mid, high, eqEnabled && advChk.Checked, eq);
+        engine.Dsp.Set(reverb, width, depth, height, level, size, tone, pre, clarity, reverbWidth, smooth, low, mid, high, eqEnabled && advChk.Checked, sliders["Decay"].Value, eq);
         RefreshEq();
     }
     bool SectionEnabled(int section) { return section == 0 ? stageEnabled : section == 1 ? spaceEnabled : eqEnabled; }
@@ -244,6 +245,7 @@ sealed class MainWindow : Form {
         applyingSpace = true;
         sliders["Reverb"].Value = 100; sliders["Stage width"].Value = 50; sliders["Stage depth"].Value = 0; sliders["Stage height"].Value = 50; sliders["Output level"].Value = 0;
         sliders["Reverb size"].Value = 100; sliders["Reverb tone"].Value = 100; sliders["Reverb pre-delay"].Value = 30; sliders["Reverb clarity"].Value = 100; sliders["Reverb width"].Value = 100; sliders["Smoothness"].Value = 100;
+        sliders["Decay"].Value = 100;
         sliders["Low"].Value = 0; sliders["Mid"].Value = 0; sliders["High"].Value = 0;
         foreach (string b in bands) sliders[b].Value = 0;
         applyingSpace = false; spaceBox.SelectedIndex = 0; PushParams();
