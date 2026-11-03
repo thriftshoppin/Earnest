@@ -463,6 +463,47 @@ def cmd_hypothesis_evaluate(a):
     return 0
 
 
+def cmd_effect_pursuit(a):
+    import hashlib
+    import soundfile as sf
+    from .engine import Artifact, EngineError, create_engine
+    try:
+        observed, observed_rate = sf.read(a.observed, dtype='float64', always_2d=True)
+        dry, dry_rate = sf.read(a.dry, dtype='float64', always_2d=True)
+        result = create_engine().execute(('audio.effect_pursuit',), {
+            'audio.observed': Artifact('earnest.audio-samples.v1', {'samples': observed, 'sample_rate_hz': int(observed_rate)}),
+            'audio.dry': Artifact('earnest.audio-samples.v1', {'samples': dry, 'sample_rate_hz': int(dry_rate)})
+        }, {'audio.effect_pursuit': {'max_delay_samples': a.max_delay_samples,
+              'max_layers': a.max_layers, 'min_improvement': a.min_improvement, 'layer_penalty': a.layer_penalty}})
+        report = result.artifacts['audio.effect_pursuit'].value
+        def identity(name):
+            path = Path(name)
+            h = hashlib.sha256()
+            with path.open('rb') as source:
+                for block in iter(lambda: source.read(1024*1024), b''): h.update(block)
+            return {'path': str(path.resolve()), 'sha256': h.hexdigest()}
+        report['inputs'] = {'observed': identity(a.observed), 'dry': identity(a.dry)}
+        from .engine.comparison import compare_audio
+        report['validation'] = {}
+        for label, name, artifact in [('target', a.target, 'audio.effect_prediction'),
+                                       ('remainder', a.remainder_reference, 'audio.effect_residual')]:
+            if name:
+                reference, rate = sf.read(name, dtype='float64', always_2d=True)
+                if rate != observed_rate:
+                    raise ValueError(label + ' reference sample rate must match')
+                comparison, _ = compare_audio(reference, result.artifacts[artifact].value['samples'], int(rate))
+                report['inputs'][label] = identity(name)
+                report['validation'][label] = comparison
+        out = Path(a.out); out.mkdir(parents=True, exist_ok=False)
+        for label in ('prediction', 'residual'):
+            sf.write(str(out / (label + '.wav')), result.artifacts['audio.effect_' + label].value['samples'], observed_rate, subtype='FLOAT')
+        (out/'pursuit.json').write_text(json.dumps(report, indent=2, allow_nan=False)+'\n', encoding='utf-8')
+        print('effect-pursuit: report, prediction and residual -> %s' % out.resolve())
+    except (OSError, ValueError, TypeError, RuntimeError, EngineError) as exc:
+        raise SystemExit('effect-pursuit: %s' % exc)
+    return 0
+
+
 def cmd_hypothesis_rank(a):
     import hashlib
     from .engine import Artifact, EngineError, create_engine
@@ -1292,6 +1333,17 @@ def main(argv=None):
     ranking.add_argument('--weight-complexity', type=float, help='penalty per note event per second')
     ranking.add_argument('--out', required=True, help='new ranking JSON file')
     ranking.set_defaults(fn=cmd_hypothesis_rank)
+    pursuit = sub.add_parser('effect-pursuit', help='fit discrete delayed copies of known dry audio')
+    pursuit.add_argument('observed', help='aligned processed recording')
+    pursuit.add_argument('--dry', required=True, help='aligned dry reference')
+    pursuit.add_argument('--target', help='optional aligned ground-truth processed source')
+    pursuit.add_argument('--remainder-reference', help='optional aligned ground-truth remainder')
+    pursuit.add_argument('--max-delay-samples', required=True, type=int, help='largest delay to consider in samples')
+    pursuit.add_argument('--max-layers', type=int, default=8)
+    pursuit.add_argument('--min-improvement', type=float, default=1e-6, help='minimum reduction relative to original observed energy')
+    pursuit.add_argument('--layer-penalty', type=float, default=0., help='per-layer penalty relative to original observed energy')
+    pursuit.add_argument('--out', required=True, help='new output directory')
+    pursuit.set_defaults(fn=cmd_effect_pursuit)
     separate = sub.add_parser("separate", help="estimate four stems using an optional Demucs backend")
     separate.add_argument("audio", help="input recording")
     separate.add_argument("--out", required=True, help="new output directory")

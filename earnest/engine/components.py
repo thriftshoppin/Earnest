@@ -129,6 +129,27 @@ class HypothesisEvaluationComponent:
                 'audio.residual': Artifact('earnest.audio-samples.v1', {'samples': residual, 'sample_rate_hz': reference['sample_rate_hz']})}
 
 
+class EffectPursuitComponent:
+    name = 'audio.effect_pursuit'
+    requires = ('audio.observed', 'audio.dry')
+    provides = ('audio.effect_pursuit', 'audio.effect_prediction', 'audio.effect_residual')
+
+    def process(self, context: ComponentContext) -> dict[str, Artifact]:
+        from .effect_pursuit import pursue_echoes
+        try:
+            observed = context.inputs['audio.observed'].value
+            dry = context.inputs['audio.dry'].value
+            if dry['sample_rate_hz'] != observed['sample_rate_hz']:
+                raise ValueError('sample rates must match')
+            report, predicted, residual = pursue_echoes(observed['samples'], dry['samples'],
+                observed['sample_rate_hz'], **dict(context.options))
+        except (KeyError, TypeError, ValueError) as exc:
+            raise EngineError('audio.effect_pursuit: %s' % exc) from exc
+        return {'audio.effect_pursuit': Artifact(report['schema'], report, notes=tuple(report['limits'])),
+                'audio.effect_prediction': Artifact('earnest.audio-samples.v1', {'samples': predicted, 'sample_rate_hz': observed['sample_rate_hz']}),
+                'audio.effect_residual': Artifact('earnest.audio-samples.v1', {'samples': residual, 'sample_rate_hz': observed['sample_rate_hz']})}
+
+
 class HypothesisRankingComponent:
     name = 'audio.hypothesis_rank'
     requires = ('audio.hypothesis_evaluations',)
@@ -534,7 +555,7 @@ class DefaultAudioPlaybackComponent:
 def create_engine() -> Engine:
     """Build the standard Earnest host; applications can register more components."""
     engine = Engine()
-    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), HypothesisEvaluationComponent(), HypothesisRankingComponent(), TranscriptionComponent(), SeparationComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
+    for component in (RoomParseComponent(), RoomSolveComponent(), InstrumentModesComponent(), FrequencyTraceComponent(), HypothesisEvaluationComponent(), HypothesisRankingComponent(), EffectPursuitComponent(), TranscriptionComponent(), SeparationComponent(), BandFocusComponent(), AudioComparisonComponent(), InstrumentIdentificationComponent(), SoundFieldSpectrumComponent(), RoomPathSoundFieldComponent(), RoomFieldSliceComponent(), RoomRenderComponent(), SpatialRenderComponent(),
                       RoomFitComponent(), RoomSolveFromAnalysisComponent(),
                       ReverbAnalysisComponent(), AcousticInferenceComponent(), RoomNoiseSourceComponent(),
                       ReceiverWavExportComponent(), DefaultAudioPlaybackComponent()):

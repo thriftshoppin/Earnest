@@ -84,3 +84,7 @@ The next design work is to formalize spatial observations and confidence/uncerta
 ## Hypothesis evidence components
 
 `audio.hypothesis_evaluate` consumes aligned `audio.reference`, `audio.stems`, and `audio.note_events` artifacts and emits an evaluation and residual. `audio.hypothesis_rank` consumes evaluations with explicitly specified weights. These components accept model-generated or externally supplied candidates. They do not invoke the model backends themselves; see [hypothesis evaluation](HYPOTHESIS_EVALUATION.md) for schemas, equations, limitations and CLI usage.
+
+## Residual-driven effect pursuit
+
+The offline `audio.effect_pursuit` component consumes observed and known dry audio and emits a versioned pursuit report, prediction and residual. The first candidate family is integer-sample delay with a shared gain. The full comparison report is included for downstream analysis. See [effect pursuit](EFFECT_PURSUIT.md).

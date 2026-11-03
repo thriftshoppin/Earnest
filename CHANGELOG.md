@@ -2,6 +2,12 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — Residual-driven effect pursuit
+
+- Added `audio.effect_pursuit` and `effect-pursuit`: a greedy least-squares pursuit of integer-sample delays of an aligned, known dry reference. It saves chosen layers, evidence, input hashes, predicted audio, residual and a full comparison of the observed recording against the prediction.
+- Added separate prediction-versus-dry measurement and optional ground-truth processed-source and remainder comparisons. These distinguish a changed dry source from an actual measured split error when known references are supplied.
+- Documented the projection equations, scoring threshold, limitations and remaining general effect-family work. Controlled tests vary source gain, recover a known echo and examine overlapping-source leakage. The complete suite passed 80 tests. These are not real-instrument or full-song validation.
+
 ## Unreleased — Hypothesis evidence integration
 
 - Added `audio.hypothesis_evaluate` and `hypothesis-evaluate` to compare an aligned sum of candidate stems with the original and save the residual, reconstruction measurements, input hashes and optional normalized note events. Basic Pitch CSV and versioned note-event JSON are supported.

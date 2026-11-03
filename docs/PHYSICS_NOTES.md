@@ -254,3 +254,7 @@ no live listening test has been performed.
 ## Hypothesis measurements
 
 The reconstruction residual and harmonic peak-support equations, explicit assumptions, and weighted ranking formula are documented in [hypothesis evaluation](HYPOTHESIS_EVALUATION.md). Peak-support uses squared detected peak amplitudes as a proxy and is not a complete Parseval energy calculation. It does not attribute overlapping partials to sources.
+
+## Effect pursuit
+
+See [effect pursuit](EFFECT_PURSUIT.md) for the implemented least-squares delay projection, acceptance criterion, assumptions and limitations. This is a greedy single-family fit; it is not a general inverse of arbitrary effect chains.
