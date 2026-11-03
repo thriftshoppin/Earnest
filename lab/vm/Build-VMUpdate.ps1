@@ -36,7 +36,7 @@ $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Update-Earnest-VM.cmd'),(Join-Path $PSScriptRoot 'Update-Earnest-VM.ps1'),(Join-Path $PSScriptRoot 'VM-UPGRADE-README.txt'),(Join-Path $PSScriptRoot 'VM-UPGRADE.md') -Destination $out
 $documentation = Join-Path $out 'documentation'
 New-Item -ItemType Directory -Path $documentation | Out-Null
-foreach ($name in @('BUILD_NOTES_NOV_03.md','ROOM_SOLVER_MATH.md','PHYSICS_NOTES.md','ROADMAP.md','CLI_COMMAND_TRANSLATION.md','ENGINE_ARCHITECTURE.md','SUITE_UPDATES_PLAN.md')) {
+foreach ($name in @('BUILD_NOTES_NOV_03.md','ROOM_SOLVER_MATH.md','PHYSICS_NOTES.md','ROADMAP.md','CLI_COMMAND_TRANSLATION.md','ENGINE_ARCHITECTURE.md','SUITE_UPDATES_PLAN.md','HYPOTHESIS_EVALUATION.md','EFFECT_PURSUIT.md')) {
   Copy-Item -LiteralPath (Join-Path $repo ('docs\' + $name)) -Destination $documentation
 }
 Copy-Item -LiteralPath (Join-Path $repo 'CHANGELOG.md') -Destination $documentation

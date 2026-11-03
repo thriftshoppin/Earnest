@@ -349,7 +349,9 @@ internal sealed class SwitchingConvolver : IWaveProvider
     readonly BufferedWaveProvider source;
     Slot current, next, pending;
     int warmFrames, fadePosition;
-    readonly int warmLength, fadeLength;
+    readonly int warmLength;
+    int fadeLength;
+    internal volatile int TargetFadeMilliseconds = 150;
     byte[] incoming = new byte[0], left = new byte[0], right = new byte[0];
     float[] oldSamples = new float[0], newSamples = new float[0];
     internal volatile float TargetGain=1f, TargetDry=0f, TargetCenter=0f, TargetMaster=1f, TargetCeiling=.1f, TargetWidth=1f;
@@ -362,6 +364,7 @@ internal sealed class SwitchingConvolver : IWaveProvider
         Eq=new ReflectionEq(WaveFormat.Channels,WaveFormat.SampleRate);
         DirectEq=new ReflectionEq(WaveFormat.Channels,WaveFormat.SampleRate);
         warmLength=(int)(WaveFormat.SampleRate*.12); // prime the direct delay and early reflections
+        TargetFadeMilliseconds=fadeMilliseconds;
         fadeLength=Math.Max(1,(int)(WaveFormat.SampleRate * fadeMilliseconds / 1000.0));
     }
     internal void RequestProfile(string path) {
@@ -386,7 +389,7 @@ internal sealed class SwitchingConvolver : IWaveProvider
             if(left.Length<bytes) { left=new byte[bytes]; right=new byte[bytes]; oldSamples=new float[n]; newSamples=new float[n]; }
             if(next==null) {
                 next=Interlocked.Exchange(ref pending,null);
-                if(next!=null) { warmFrames=0; fadePosition=0; }
+                if(next!=null) { warmFrames=0; fadePosition=0; fadeLength=Math.Max(1,(int)(WaveFormat.SampleRate * TargetFadeMilliseconds / 1000.0)); }
             }
             Apply(current); current.Buffer.AddSamples(incoming,done,bytes); current.Convolver.Read(left,0,bytes);
             if(next==null) Buffer.BlockCopy(left,0,buffer,offset+done,bytes);
@@ -530,6 +533,7 @@ internal static class Program
                         string wetEqFile = Argument(args, "--wet-eq-file");
                         string directEqFile = Argument(args, "--direct-eq-file");
                         string widthFile = Argument(args, "--width-file");
+                        string crossfadeFile = Argument(args, "--crossfade-file");
                         string limitArg = Argument(args, "--output-limit");
                         if (limitArg != null) {
                             float limit;
@@ -555,6 +559,11 @@ internal static class Program
                                 float gain;
                                 if (Single.TryParse(File.ReadAllText(gainFile).Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out gain) && !Single.IsNaN(gain) && !Single.IsInfinity(gain))
                                     convolver.TargetGain = Math.Max(0f, Math.Min(2.5f, gain));
+                            } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                            if (crossfadeFile != null) try {
+                                int milliseconds;
+                                if (Int32.TryParse(File.ReadAllText(crossfadeFile).Trim(), out milliseconds) && milliseconds >= 20 && milliseconds <= 2000)
+                                    convolver.TargetFadeMilliseconds = milliseconds;
                             } catch (IOException) { } catch (UnauthorizedAccessException) { }
                             if (mixFile != null) try {
                                 string[] parts = File.ReadAllText(mixFile).Trim().Split(',');

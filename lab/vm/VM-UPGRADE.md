@@ -23,3 +23,14 @@ The scripts download dependencies; Demucs downloads its model weights on first u
 ## Building the update on the host
 
 `powershell -ExecutionPolicy Bypass -File .\lab\vm\Build-VMUpdate.ps1 -OutputDirectory <new-directory>` creates that directory, a sibling ZIP and its SHA-256 file. The builder uses Windows .NET Framework C# compiler and the NAudio DLLs already in the repository; it builds into a separate ignored directory so an open Frankenjack window does not lock the output. Copy the ZIP to the VM and extract the complete archive. The checksum detects accidental corruption; it is not a digital signature or proof of publisher identity.
+
+## Current update: room controls and analysis
+
+This package is cumulative for the existing VM lab and can be installed directly; the earlier November 3 application update is not a prerequisite. Open Frankenjack and choose **Advanced Mix** for direct/dry and center gains, master gain, peak ceiling, wet gain, room tail and decay, absorption, scattering, diffuse energy, seven-band direct and wet EQ, and room selection. The new **Room Crossfade** slider sets the transition time for the next room change (20–2000 ms); the bridge keeps the endpoint open while warming and fading the replacement room. Stage width remains on the main window. Center reinforcement raises shared stereo content and is not isolated vocals.
+
+The package includes the CLI hypothesis comparison, ranking and dry-reference effect pursuit commands, with documentation in the `documentation` folder. They are offline file analyses. Demucs and Basic Pitch are optional external runtimes, are not bundled, and are not currently real-time sources. This build does not provide live instrument separation or instrument faders; existing playback captures a mixed stream. Some legacy StageJack-looking controls are not mapped to Earnest DSP. Do not infer that every displayed StageJack control changes the audio. No live endpoint or VM listening test was performed for this update.
+
+### Capture Demo
+
+In Frankenjack choose the playback device under analysis, press **Start Feed**, play and pause the song, then press **Stop Feed**. The button records up to five minutes from that selected analysis monitor into a temporary WAV; it does not change the current audio route. If the guest Demucs backend is installed, separation starts after capture and the temporary folder opens with the original and estimated four stems. If it is missing, the clip is retained and the app tells you. This is a short batch workflow, not continuous real-time separation; there are no instrument faders yet. Captures reside under the guest's temporary `Earnest-Demos` folder until you or the operating system remove them. Avoid capturing material you do not want stored there. The current capture accepts mono and stereo playback devices and converts mono to stereo; choose the relevant source under analysis before recording.
+

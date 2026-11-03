@@ -8,9 +8,27 @@ internal sealed class StageJackMonitor : IDisposable {
     readonly float[] outputTapL=new float[InputTapLength], outputTapR=new float[InputTapLength];
     readonly object outputTapLock=new object();
     int outputTapWrite, outputTapLastTick, outputTapCount; bool outputHasData;
+    float[] clipSamples; int clipFrames, clipRate; bool clipActive;
+    public bool ClipLimitReached { get; private set; }
     WasapiLoopbackCapture systemLoopback; MMDeviceEnumerator analysisEnumerator; MMDevice systemLoopbackDevice;
     string analysisEndpointId; bool analysisConfigured;
     internal string MonitorError;
+    public void BeginClip(int seconds) {
+        if (seconds < 1 || seconds > 300) throw new ArgumentOutOfRangeException("seconds");
+        lock(outputTapLock) {
+            if (systemLoopback == null) throw new InvalidOperationException("Select an active analysis playback device first.");
+            if (systemLoopback.WaveFormat.Channels > 2) throw new InvalidOperationException("Demo capture currently supports mono or stereo analysis devices.");
+            clipRate=systemLoopback.WaveFormat.SampleRate;
+            clipSamples=new float[clipRate * seconds * 2]; clipFrames=0; clipActive=true; ClipLimitReached=false;
+        }
+    }
+    public int FinishClip(string path) {
+        float[] samples; int frames, rate;
+        lock(outputTapLock) { clipActive=false; samples=clipSamples; frames=clipFrames; rate=clipRate; clipSamples=null; }
+        if (samples==null || frames==0) throw new InvalidOperationException("No audio frames arrived; check the analysis device and playback.");
+        using (var writer=new WaveFileWriter(path,WaveFormat.CreateIeeeFloatWaveFormat(rate,2))) writer.WriteSamples(samples,0,frames*2);
+        return frames;
+    }
     public void CopyRecentOutput(float[] left,float[] right) {
         if(left==null || right==null || left.Length!=right.Length) return;
         lock(outputTapLock) {
@@ -41,7 +59,8 @@ internal sealed class StageJackMonitor : IDisposable {
         int channels = Math.Max(1, format.Channels);
         int sampleBytes = Math.Max(1, format.BitsPerSample / 8);
         if (block <= 0 || e.BytesRecorded < block) return;
-        bool isFloat = format.Encoding == WaveFormatEncoding.IeeeFloat && format.BitsPerSample == 32;
+        var ext = format as WaveFormatExtensible;
+        bool isFloat = format.BitsPerSample == 32 && (format.Encoding == WaveFormatEncoding.IeeeFloat || (ext != null && ext.SubFormat == new Guid("00000003-0000-0010-8000-00aa00389b71")));
         int frames = e.BytesRecorded / block;
         lock (outputTapLock) {
             int w = outputTapWrite;
@@ -50,6 +69,10 @@ internal sealed class StageJackMonitor : IDisposable {
                 float l = ReadLoopbackSample(e.Buffer, frame, format.BitsPerSample, isFloat);
                 float r = channels > 1 ? ReadLoopbackSample(e.Buffer, frame + sampleBytes, format.BitsPerSample, isFloat) : l;
                 outputTapL[w] = ClampSample(l); outputTapR[w] = ClampSample(r);
+                if(clipActive && format.SampleRate==clipRate && clipFrames*2 < clipSamples.Length) {
+                    clipSamples[clipFrames*2]=ClampSample(l); clipSamples[clipFrames*2+1]=ClampSample(r); clipFrames++;
+                    if(clipFrames*2==clipSamples.Length) { clipActive=false; ClipLimitReached=true; }
+                }
                 w = (w + 1) & (InputTapLength - 1);
             }
             outputTapCount = Math.Min(InputTapLength, outputTapCount + frames);
@@ -112,6 +135,7 @@ internal sealed class StageJackMonitor : IDisposable {
     }
 
     void StopSystemLoopback() {
+        lock(outputTapLock) { clipActive=false; }
         WasapiLoopbackCapture capture = systemLoopback;
         MMDevice device = systemLoopbackDevice;
         systemLoopback = null;

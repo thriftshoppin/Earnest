@@ -59,7 +59,10 @@ public sealed class EarnestEngine {
     public readonly EarnestControls Dsp;
     public EarnestEngine() {
         root = Environment.GetEnvironmentVariable("EARNEST_HOME");
-        if (String.IsNullOrEmpty(root)) root=Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","..","earnest"));
+        if (String.IsNullOrEmpty(root)) {
+            string app=Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,".."));
+            root=File.Exists(Path.Combine(app,"earnest","cli.py")) ? app : Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"..","..","earnest"));
+        }
         room=Path.Combine(root,"inbox","rooms","Union-Stairs.room.json");
         host=Path.Combine(root,"earnest","audio","native","EarnestAudioHost-eq.exe");
         profile=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Earnest","stagejack","room.erir");
@@ -73,6 +76,10 @@ public sealed class EarnestEngine {
     public bool Building { get { lock(gate) return building; } }
     public string Error { get { lock(gate) return error; } }
     public string RoomPath { get { lock(gate) return room; } }
+    public string AppRoot { get { return root; } }
+    public void BeginDemoClip(int seconds) { monitor.BeginClip(seconds); }
+    public int FinishDemoClip(string path) { return monitor.FinishClip(path); }
+    public bool DemoClipLimitReached { get { return monitor.ClipLimitReached; } }
     public void SelectRoom(string path) {
         string selected=Path.GetFullPath(path);
         if (!File.Exists(selected)) throw new FileNotFoundException("Room file not found", selected);
@@ -124,7 +131,8 @@ public sealed class EarnestEngine {
         try {
             Directory.CreateDirectory(Path.GetDirectoryName(profile));
             if(!File.Exists(roomFile) || !File.Exists(host)) throw new Exception("Earnest room or audio host not found in " + root);
-            var psi=new ProcessStartInfo("python", "-u -m earnest.audio.stagejack "+Q(roomFile)+" "+Q(temp)+" --wet "+w+" --tail "+t+" --decay "+dec+" --absorption "+a+" --scattering "+s+" --diffusion "+d);
+            string bundledPython=Path.GetFullPath(Path.Combine(root,"..","python","python.exe"));
+            var psi=new ProcessStartInfo(File.Exists(bundledPython) ? bundledPython : "python", "-u -m earnest.audio.stagejack "+Q(roomFile)+" "+Q(temp)+" --wet "+w+" --tail "+t+" --decay "+dec+" --absorption "+a+" --scattering "+s+" --diffusion "+d);
             psi.WorkingDirectory=root; psi.UseShellExecute=false; psi.CreateNoWindow=true; psi.RedirectStandardOutput=true; psi.RedirectStandardError=true;
             using(var p=Process.Start(psi)) { string stdout=p.StandardOutput.ReadToEnd(); string stderr=p.StandardError.ReadToEnd(); p.WaitForExit(); if(p.ExitCode!=0) throw new Exception("Room compilation failed: " + stderr + stdout); }
             lock(gate) {
@@ -140,7 +148,7 @@ public sealed class EarnestEngine {
                 if (bridge!=null && !bridge.HasExited) { bridge.Kill(); bridge.WaitForExit(); }
                 WriteGain(); WriteEq(); WriteWidth();
                 if(File.Exists(profileUpdateFile)) File.Delete(profileUpdateFile);
-                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --profile-update-file "+Q(profileUpdateFile)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --width-file "+Q(widthFile)+" --output-limit 1");
+                var run=new ProcessStartInfo(host,"--bridge --input "+Q(source)+" --output "+Q(dest)+" --ir-profile "+Q(temp)+" --profile-update-file "+Q(profileUpdateFile)+" --gain-file "+Q(gainFile)+" --wet-eq-file "+Q(eqFile)+" --mix-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"advanced-mix.txt"))+" --direct-eq-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"direct-eq.txt"))+" --crossfade-file "+Q(Path.Combine(Path.GetDirectoryName(profile),"room-crossfade-ms.txt"))+" --width-file "+Q(widthFile)+" --output-limit 1");
                 run.WorkingDirectory=Path.GetDirectoryName(host); run.UseShellExecute=false; run.CreateNoWindow=false;
                 bridge=Process.Start(run); activeInput=source; activeOutput=dest; error=null;
             }

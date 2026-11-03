@@ -29,6 +29,8 @@ internal static class FrankenjackControlTests {
                 Move(Find(panel,"DIRECT / DRY"),35);
                 Move(Find(panel,"CENTER REINFORCEMENT"),20);
                 Check(File.ReadAllText(path)=="35,20,100,10","dry and center update bridge file");
+                Move(Find(panel,"ROOM CROSSFADE"),350);
+                Check(File.ReadAllText(path+".crossfade")=="350","room crossfade updates bridge file");
                 Move(Find(panel,"Reverb"),80);
                 Move(Find(panel,"Reverb tone"),120);
                 Move(Find(panel,"Decay"),150);
@@ -43,7 +45,7 @@ internal static class FrankenjackControlTests {
                 Check(Find(panel,"Reverb").Value==42,"main-to-advanced slider synchronization");
                 Check(values["Reverb"]==80,"synchronization does not re-trigger control callback");
             }
-        } finally { if(File.Exists(path))File.Delete(path); if(File.Exists(path+".directeq"))File.Delete(path+".directeq"); }
+        } finally { if(File.Exists(path))File.Delete(path); if(File.Exists(path+".directeq"))File.Delete(path+".directeq"); if(File.Exists(path+".crossfade"))File.Delete(path+".crossfade"); }
         return failures==0 ? 0 : 1;
     }
 }

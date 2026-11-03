@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Text;
 using System.IO;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Microsoft.Win32;
 using System.Windows.Forms;
@@ -101,6 +102,49 @@ sealed class MainWindow : Form {
             } else advancedWindow.BringToFront();
         };
         Controls.Add(advancedMix); advancedMix.BringToFront();
+        var demo = new Button { Name="CaptureDemo", Text="START FEED", Left=Width-370, Top=76, Width=145, Height=28, BackColor=Color.FromArgb(31,48,45), ForeColor=Color.White, FlatStyle=FlatStyle.Flat };
+        var demoTip = new ToolTip(); demoTip.SetToolTip(demo,"Capture up to five minutes from the selected analysis playback device.");
+        string demoDir=null; bool capturingDemo=false;
+        demo.Click += delegate {
+            if (capturingDemo) {
+                capturingDemo=false; demo.Enabled=false;
+            } else {
+            try {
+                demoDir=Path.Combine(Path.GetTempPath(),"Earnest-Demos",Guid.NewGuid().ToString("N"));
+                Directory.CreateDirectory(demoDir);
+                engine.BeginDemoClip(300); capturingDemo=true; demo.Text="STOP FEED";
+            } catch(Exception ex) { MessageBox.Show(this,ex.Message,"Demo capture"); }
+            return;
+            }
+            string captured=Path.Combine(demoDir,"demo.wav");
+            try {
+                engine.FinishDemoClip(captured);
+                if (engine.DemoClipLimitReached) MessageBox.Show(this,"The five-minute capture limit was reached; the demo contains the first five minutes.","Demo capture");
+                string backend=Path.Combine(engine.AppRoot,"runs","runtime","demucs","Scripts","demucs.exe");
+                if(!File.Exists(backend)) {
+                    demo.Enabled=true; demo.Text="START FEED";
+                    MessageBox.Show(this,"Demo captured. The optional Demucs backend is not installed; the temporary clip is ready in the folder that opens.","Demo capture");
+                    Process.Start("explorer.exe",demoDir); return;
+                }
+                demo.Text="SEPARATING...";
+                string folder=demoDir, app=engine.AppRoot;
+                System.Threading.ThreadPool.QueueUserWorkItem(delegate {
+                    int code=-1; string error=null;
+                    try {
+                        string bundled=Path.GetFullPath(Path.Combine(app,"..","python","python.exe"));
+                        var psi=new ProcessStartInfo(File.Exists(bundled)?bundled:"python", "-m earnest separate \""+captured+"\" --out \""+Path.Combine(folder,"stems")+"\"");
+                        psi.WorkingDirectory=app; psi.UseShellExecute=false; psi.CreateNoWindow=true;
+                        using(var process=Process.Start(psi)) { process.WaitForExit(); code=process.ExitCode; }
+                    } catch(Exception ex) { error=ex.Message; }
+                    if(!IsDisposed && IsHandleCreated) try { BeginInvoke((MethodInvoker)delegate {
+                        demo.Enabled=true; demo.Text="START FEED";
+                        MessageBox.Show(this, code==0 ? "Demo separated. The temporary folder contains the original clip and estimated stems." : "Demo captured, but separation failed. " + (error ?? ("Exit code " + code)), "Demo capture");
+                        Process.Start("explorer.exe",folder);
+                    }); } catch(InvalidOperationException) {}
+                });
+            } catch(Exception ex) { demo.Enabled=true; demo.Text="START FEED"; MessageBox.Show(this,ex.Message,"Demo capture"); }
+        };
+        Controls.Add(demo); demo.BringToFront();
 
         saveTimer = new Timer { Interval = 500 }; saveTimer.Tick += delegate { saveTimer.Stop(); Save(); };
         pollTimer = new Timer { Interval = 500 }; pollTimer.Tick += delegate { Poll(); }; pollTimer.Start();
@@ -123,7 +167,7 @@ sealed class MainWindow : Form {
         if (Missing()) BeginWait(); else if (wantRun) Start();
         if (Array.IndexOf(Environment.GetCommandLineArgs(), "--start-earnest") >= 0)
             Shown += delegate { if (!engine.Running && !waiting) Toggle(); };
-        FormClosing += delegate { saveTimer.Stop(); pollTimer.Stop(); viewTimer.Stop(); pingTimer.Stop(); engine.Shutdown(); Save(); trayIcon.Visible = false; if (trayIcon.ContextMenuStrip != null) trayIcon.ContextMenuStrip.Dispose(); trayIcon.Dispose(); };
+        FormClosing += delegate { demoTip.Dispose(); saveTimer.Stop(); pollTimer.Stop(); viewTimer.Stop(); pingTimer.Stop(); engine.Shutdown(); Save(); trayIcon.Visible = false; if (trayIcon.ContextMenuStrip != null) trayIcon.ContextMenuStrip.Dispose(); trayIcon.Dispose(); };
     }
 
     void MinimizeToTray() { if (trayIcon == null) return; trayIcon.Visible = true; ShowInTaskbar = false; Hide(); }

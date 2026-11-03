@@ -2,6 +2,12 @@
 
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
+## Unreleased — VM room-control update
+
+- Added Start Feed and Stop Feed control that records up to five minutes of the selected mono/stereo analysis endpoint into the guest temporary folder, then runs the optional Demucs backend if installed and opens the results folder. The capture and batch separator are not continuous real-time separation, and instrument faders remain unimplemented. The button has not yet been exercised on the VM or with a live endpoint.
+- Added an Advanced Mix room crossfade duration control (20–2000 ms), applied to the next in-stream room transition. Existing room warmup is unchanged. Offline tests cover slider output, filter and transition behavior; live VM playback has not been verified.
+- Corrected VM application-root discovery and prefer the VM's bundled Python for Frankenjack room compilation. The cumulative VM updater includes the hypothesis and effect-pursuit documentation. Live instrument separation and instrument faders are not present.
+
 ## Unreleased — Residual-driven effect pursuit
 
 - Added `audio.effect_pursuit` and `effect-pursuit`: a greedy least-squares pursuit of integer-sample delays of an aligned, known dry reference. It saves chosen layers, evidence, input hashes, predicted audio, residual and a full comparison of the observed recording against the prediction.
@@ -126,3 +132,4 @@ This log records local builds, grouped by development phase. Dates are local pro
 ## Baseline 9cabc1e — 2026-11-02
 
 - Consolidated the experimental room engine, configurable audio lab, VM packaging, CLI, viewer and initial math documentation. The VM device and routing were experimental; the user's earlier listening report was not a controlled equivalence test. Earlier repository history predates this changelog.
+

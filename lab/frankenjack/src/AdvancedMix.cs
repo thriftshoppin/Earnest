@@ -9,7 +9,7 @@ using System.Windows.Forms;
 public sealed class AdvancedMix : Form {
     readonly TrackBar dry = new TrackBar(), center = new TrackBar(), master = new TrackBar(), ceiling = new TrackBar();
     readonly Label dryValue = new Label(), centerValue = new Label(), masterValue = new Label(), ceilingValue = new Label();
-    readonly string path, directEqPath;
+    readonly string path, directEqPath, crossfadePath;
     readonly TrackBar[] directBands = new TrackBar[7];
     readonly Label[] directValues = new Label[7];
     readonly Dictionary<string, TrackBar> engineBars = new Dictionary<string, TrackBar>();
@@ -17,6 +17,7 @@ public sealed class AdvancedMix : Form {
     public AdvancedMix(Func<string,int> readControl, Action<string,int> setControl, string controlPath = null, Func<string> getRoom = null, Action<string> setRoom = null) {
         path = controlPath ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Earnest", "stagejack", "advanced-mix.txt");
         directEqPath = controlPath == null ? Path.Combine(Path.GetDirectoryName(path), "direct-eq.txt") : controlPath + ".directeq";
+        crossfadePath = controlPath == null ? Path.Combine(Path.GetDirectoryName(path), "room-crossfade-ms.txt") : controlPath + ".crossfade";
         Text = "Earnest | Advanced mix and room controls"; Width = 570; Height = 720; FormBorderStyle = FormBorderStyle.Sizable; AutoScroll = true;
         BackColor = Color.FromArgb(19,25,25); ForeColor = Color.White; StartPosition = FormStartPosition.CenterParent;
         AddRow("DIRECT / DRY", dry, dryValue, 0, 200, 0, 20);
@@ -26,6 +27,13 @@ public sealed class AdvancedMix : Form {
         var note = new Label { Text = "Center boosts shared L/R, not vocals alone. Ceiling is a hard clamp. Room changes prepare a new profile and crossfade; endpoint changes restart the bridge.", Left = 18, Top = 305, Width = 490, Height = 42, ForeColor = Color.LightGray };
         Controls.Add(note);
         int y = 355;
+        Controls.Add(new Label { Text="ROOM CROSSFADE (ms)", Left=18, Top=y, Width=300, Height=22 });
+        var fadeValue = new Label { Left=450, Top=y, Width=65, Height=22 }; Controls.Add(fadeValue);
+        var fade = new TrackBar { Name="ROOM CROSSFADE", Minimum=20, Maximum=2000, Value=150, TickStyle=TickStyle.None };
+        try { int saved; if (Int32.TryParse(File.ReadAllText(crossfadePath), out saved)) fade.Value=Math.Max(20,Math.Min(2000,saved)); } catch(IOException) {} catch(UnauthorizedAccessException) {}
+        fadeValue.Text=fade.Value+" ms"; fade.SetBounds(14,y+22,495,36);
+        fade.Scroll += delegate { Directory.CreateDirectory(Path.GetDirectoryName(crossfadePath)); File.WriteAllText(crossfadePath,fade.Value.ToString(CultureInfo.InvariantCulture)); fadeValue.Text=fade.Value+" ms"; };
+        Controls.Add(fade); y += 70;
         string[] keys = { "Reverb", "Reverb size", "Decay", "Reverb tone", "Reverb clarity", "Smoothness", "125 Hz", "250 Hz", "500 Hz", "1 kHz", "2 kHz", "4 kHz", "8 kHz" };
         string[] labels = { "WET FIELD GAIN", "TAIL LENGTH SCALE", "DECAY TIME SCALE", "ABSORPTION SCALE", "SCATTERING SCALE", "DIFFUSE ENERGY SCALE", "WET EQ 125 Hz", "WET EQ 250 Hz", "WET EQ 500 Hz", "WET EQ 1 kHz", "WET EQ 2 kHz", "WET EQ 4 kHz", "WET EQ 8 kHz" };
         for (int i = 0; i < keys.Length; i++) {

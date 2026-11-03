@@ -24,3 +24,18 @@ source documentation for setup. Their first model run may download weights.
 Run audio at your usual safe starting level. The new room crossfade and the
 StageJack playback analyzer have not been verified on this VM. The analyzer
 monitors the selected Windows playback endpoint, which can include other apps.
+
+CURRENT UPDATE
+This ZIP is cumulative: it can be applied to your existing VM lab directly;
+you do not need to install the earlier application update first. Advanced Mix
+includes the room crossfade slider and independent direct/wet EQ controls.
+The hypothesis and effect-pursuit tools are currently offline CLI analysis.
+Real-time instrument separation and faders are not implemented in this build.
+See documentation\EFFECT_PURSUIT.md and HYPOTHESIS_EVALUATION.md.
+
+CAPTURE: Choose the analysis playback device. Press Start Feed, play and pause
+the song, then press Stop Feed. It captures up to five minutes, then separates if
+the optional Demucs backend is installed. The folder opens when it finishes.
+Clips remain in the temporary Earnest-Demos folder until removed. This is not a
+continuous separator and does not yet provide independent instrument faders.
+
