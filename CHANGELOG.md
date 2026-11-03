@@ -1,82 +1,110 @@
 # Changelog
 
-Changes are grouped by local build/commit. Dates are local project dates. Entries describe implemented work and material limitations; a local commit is not a public release.
+This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
-## Unreleased — 2026-11-03
+## Phase 8 — Source separation, transcription and VM update
 
-- Added optional Demucs four-stem separation through the engine and CLI. A generated-tone smoke test produced four output files; musical separation quality is not yet validated.
-- Added a VM application update builder and guest updater with per-file hashes and backups, plus upgrade and changes-since-baseline documentation. This does not change the guest driver or bundle optional model runtimes.
-- Added an optional isolated Basic Pitch backend with `transcribe`, an engine component, note-event/MIDI outputs and provenance. A generated A440 tone produced MIDI note 69 in an offline integration run; general accuracy and instrument separation remain unvalidated.
-- Added candidate reconstruction ranking with source hashes, residual reports by time interval, and optional equal-tempered coordinates on measured spectral peaks. These scores and labels do not independently identify instruments or note events.
+### Local build bf5c8fe — 2026-11-03
 
-## Local build 25633df — 2026-11-03
+- Added the optional `audio.separate` engine component and `earnest separate` CLI. The isolated Demucs `htdemucs` backend produces estimated vocals, drums, bass and other stems, plus a manifest identifying the input, hash, model and output paths. CPU is the default; CUDA and a separate backend path can be selected. The outputs can contain leakage, room sound and multiple instruments, and can be rescaled by the backend.
+- Added the optional `audio.transcribe` component and `earnest transcribe` CLI using a separate Basic Pitch environment. It writes MIDI, note-event CSV and a provenance manifest; an alternate executable can be configured. Basic Pitch works best on one instrument at a time and does not identify or separate every instrument in a song.
+- Added Python 3.11 setup scripts and direct dependency pins for both optional model environments. These environments and model weights are not checked into Git or bundled in the VM update. Demucs may download model weights on first use. The pins are not a complete lock of all transitive dependencies.
+- Extended `audio-compare` with optional time-segmented reports, and added `audio-rank` to order aligned candidate reconstructions by mean-square error while recording source hashes. These are sample-domain measurements, not perceptual scores or proof that a source or room was identified correctly.
+- Added optional equal-tempered pitch coordinates and cents offsets to spectral peaks in `frequency-trace`. This maps frequencies mathematically; it does not establish fundamentals, played notes, onsets, instrument identity or MIDI events.
+- Added a VM application update builder, guest updater, per-file integrity manifest, backup of overwritten files, upgrade instructions and a separate update ZIP with accompanying checksum. It updates application code, room editor, viewer files and Frankenjack; it preserves guest inboxes and settings, existing runtimes and the installed driver. It does not update Windows, alter Secure Boot or bundle the optional models. Recovery from a failed update is manual, and the checksums are not a publisher signature.
+- Added the changes-since-baseline report, model and updater documentation, and tests for pitch conversion, comparison segments/ranking, backend adapters and updater behavior. A generated A440 tone produced MIDI note 69; a generated-tone separation produced four files. These are smoke tests, not full-song accuracy evaluations. The complete Python suite passed 71 tests at the close of this build; native audio and UI checks passed offline. The update ZIP was applied to a temporary mock installation, not to the user's VM.
 
-- Added offline `focus-band` frequency isolation and `audio-compare` residual analysis, exposed as engine components for agent-driven investigation. Tests cover filter selectivity, aligned subtraction, per-band Parseval energy and validation. These are not instrument separation or MIDI transcription.
+## Phase 7 — Frequency focus and comparison
 
-## Local build 4aaa619 — 2026-11-03
+### Local build 25633df — 2026-11-03
 
-- Restored the original StageJack selectable playback-loopback analyzer in Frankenjack and corrected the graph to show Earnest's seven reflection EQ filters. Offline checks cover sample decoding, missing input and the curve; live monitor behavior still needs verification.
-- Added a suite updater design covering staged installation, compatibility, user data and rollback; it is not implemented.
+- Added the `audio.focus_band` engine component and `focus-band` CLI. An offline forward/backward Butterworth band-pass writes a float WAV for a selected frequency range. Tests exercise cutoff validation, preservation of a selected tone, rejection of a distant tone, channel layout and overwrite protection.
+- Added `audio.compare` and `audio-compare`: subtract an already aligned candidate from a reference and report channel error and frequency-band energies using real-FFT Parseval normalization. The component exposes residual samples for subsequent analysis. Tests cover known missing tones, exact matches, channel/bounds checks and even/odd FFT lengths.
+- Documented filter phase and edge limitations, spectral band weighting and alignment requirements. Frequency focusing does not uniquely isolate instruments, and a low residual does not prove a unique explanation.
 
-## Local build 93a7ce8 — 2026-11-03
+## Phase 6 — Live room controls and visualization
 
-- Added in-stream replacement room profiles with a 120 ms warm-up and 150 ms linear crossfade, plus offline continuity and invalid-profile checks. Endpoint changes still restart the bridge; live behavior and CPU headroom remain unverified.
+### Local build 4aaa619 — 2026-11-03
 
-## Local build c87e84f — 2026-11-03
+- Reused the original StageJack selected-playback WASAPI loopback monitor and spectrum renderer in Frankenjack, restored the analysis device picker and connected its output to the visualizer. This monitors the chosen Windows endpoint mix, which can include other applications; it is not an exclusive measurement of the Earnest bridge.
+- Replaced the hard-coded flat displayed EQ response with the response of Earnest's seven reflection peaking filters, and aligned the displayed nodes with those controls. Offline checks cover sample decoding, missing-input behavior and the displayed filter response. The updated display has not been validated live in the VM.
+- Added `docs/SUITE_UPDATES_PLAN.md` describing a future versioned suite updater, compatibility checks, staged installation and rollback. That broader updater remains a plan; the later VM application updater is a narrower implementation.
 
-- Added a saved room selector to Frankenjack Advanced Mix; room changes still rebuild and restart the bridge. Offline checks cover the selector and missing-file handling, not live switching.
+### Local build 93a7ce8 — 2026-11-03
 
-## Local build 489e0d8 — 2026-11-03
+- Added preparation of replacement room profiles while the bridge stays open, then a 120 ms warm-up and 150 ms linear crossfade between the current and replacement convolver outputs. Invalid profile preparation retains the current room.
+- Added offline checks for transition continuity and invalid updates. Endpoint changes still restart the bridge; the new tail builds from limited recent history, overlap briefly increases processing load, and no live glitch-free result is claimed. The UI reports preparation rather than confirmed application.
 
-- Added file-based decay, late-tail energy, and tail-duration CLI commands with independent baseline scaling, explicit extended range, and overwrite protection.
-- Documented a research comparison with Pyroomacoustics and a possible measured-scene evaluation; this is not a validation result.
+### Local build c87e84f — 2026-11-03
 
-## Local build 4f57715 — 2026-11-03
+- Added a saved room-file chooser to Frankenjack Advanced Mix, replacing the fixed Union Stairs source path. The chooser displays the selected file and rejects a missing file; the room is compiled by the existing adapter.
+- Added offline room-selector and control-window checks. At this build, changing a room restarted the bridge; the later crossfade build changes that behavior. This does not validate every room format or live device route.
 
-- Wired the Stage Width control to a smoothed, unity-by-default stereo mid/side stage independent of the room, with offline mono, unity and widened checks. Other spatial positioning controls remain unwired.
+### Local build 489e0d8 — 2026-11-03
 
-## Local build e877184 — 2026-11-03
+- Added file-based `set-decay`, `set-tail` and `set-tail-duration` commands. Each scales its corresponding control from an explicit baseline room and writes a new file; normal and forced percentage bounds, room-schema limits and existing-file protection are checked.
+- Added CLI tests for independent controls, the extended range and invalid output. Documented the distinction between late-field energy, decay time and rendered duration, and recorded a research comparison with Pyroomacoustics. The interactive command session, live refresh and device-selection commands remain proposals.
 
-- Added separate unity-by-default seven-band direct EQ in Frankenjack Advanced Mix and the native bridge, independent of reflection EQ. Offline tests verify ±6 dB at every band center, path isolation, and UI file bindings.
+### Local build 4f57715 — 2026-11-03
 
-## Local build 9bb7239 — 2026-11-03
+- Connected the Stage Width dial to a smoothed stereo mid/side operation after the direct and wet mix: zero removes side, the midpoint preserves the signal and the maximum doubles side. The stage enable control now reaches that path.
+- Added offline tests for mono, unity and widened channel outputs and documented the equations. This is stereo processing rather than physical source placement, multichannel rendering or binaural spatialization; widening can increase peaks before the ceiling.
 
-- Added an independent decay-time multiplier to the room engine, Room Studio, and Frankenjack Advanced Mix; retained the separate tail cutoff control. Added synthesized decay-slope, profile, adapter and offline UI-binding checks.
+### Local build e877184 — 2026-11-03
 
-## Local build 8fba240 — 2026-11-03
+- Added a separate seven-band direct-sound peaking EQ, its Advanced Mix controls and its own control file. It processes delayed direct sound before the center contribution; reflection EQ remains independent and both default to unity.
+- Added offline checks at every EQ center for positive and negative gain, direct/wet isolation and UI bindings. Documented the coefficient equations and native-host deployment path. No live listening result is implied.
 
-- Added independent, common in-phase and opposite-polarity source assumptions to the room-field viewer, plus validated custom complex correlation matrices in the engine/CLI. Exact cancellation and missing near-source values are represented separately when a nonzero reference exists.
+### Local build 9bb7239 — 2026-11-03
 
-## Local build 6ce0354 — 2026-11-03
+- Added `decay_scale` to the room model, solver, live profile adapter, Room Studio and Frankenjack. It multiplies the selected modeled RT60 while preserving raw Sabine/Eyring estimates; tail render duration remains a separate control with an eight-second cap.
+- Added tests of raw and effective decay, synthesized tail slope, profile propagation and controls; updated the equation sheet and command reference. The multiplier is a tuning control, not a recovered physical room property.
 
-- Added an interactive, relative, single-frequency room-field slice and CLI export using coherent image paths within each source and independent powers across sources. The map is a limited point-sampled preview, not a measured SPL or late-field simulation.
+## Phase 5 — Room-field and decay refinements
 
-## Local build c773cd3 — 2026-11-03
+### Local build 8fba240 — 2026-11-03
 
-- Added finite-window C50, C80, D50 and center-time energy diagnostics per modeled source/listener band, with boundary and zero-energy checks.
+- Added independent, common in-phase and opposite-polarity source assumptions in Room Studio's field map, plus custom complex source-correlation matrices in the engine and CLI. Added an opposed-source example.
+- Added validation and cancellation tests; exact zero and unavailable near-source samples have distinct representations. The view remains a modeled, relative single-frequency slice.
 
-## Local build 8a9f011 — 2026-11-03
+### Local build 6ce0354 — 2026-11-03
 
-- Added optional air absorption to Sabine/Eyring decay, decay fitting and the existing diffuse energy approximation, using the same `4mV` correction. Added equation, air-only and fit-consistency checks.
+- Added an interactive room-field slice, engine component and CLI export. It sums coherent image paths for each source and initially assumes independent powers across sources; source and receiver placement come from the editable room.
+- Added field-grid and editor checks, including cancellation behavior and invalid inputs. This point-sampled preview is not calibrated SPL and does not model the diffuse late field.
 
-## Local build 1102fb3 — 2026-11-03
+### Local build c773cd3 — 2026-11-03
 
-- Added cross-spectral propagation for multiple correlated sources and receivers, with Hermitian/positive-semidefinite validation and a CLI. An explicit-path adapter uses the existing room solution; it does not include the diffuse statistical tail or calibrated absolute SPL.
-- Corrected the equation sheet's IACC, source directivity, air attenuation, specular-scattering and cross-spectral convention descriptions.
-- Added equation and integration checks under `tests` and a small independent stereo source-spectrum example.
+- Added finite-window C50, C80, D50 and center-time energy diagnostics for modeled source/listener octave-band responses. Added tests for time boundaries, zero energy and known signal cases.
+- Updated equation and physics documentation. Results are limited to the simulated finite response, not an independently measured venue.
 
-## Local build b7e0b66 — 2026-11-03
+### Local build 8a9f011 — 2026-11-03
 
-- Expanded Room Studio with editable geometry, materials, source/listener controls, decay chart, drag and keyboard interaction, room export, and reconstructable instruction export. Rectangular geometry only.
+- Added optional atmospheric absorption to Sabine/Eyring decay, absorption fitting and the diffuse-field approximation using the documented `4mV` correction; explicit paths already had optional atmospheric attenuation.
+- Added reference-value, air-only and fit-consistency checks and updated the equation and physics notes. Model validity remains bounded by the stated atmospheric and room assumptions.
 
-## Local build 092e434 — 2026-11-03
+### Local build 1102fb3 — 2026-11-03
 
-- Added an experimental supervised instrument reference matcher and CLI training/identification. Real-world accuracy and full-song identification remain unvalidated.
+- Added cross-spectral propagation for multiple correlated sources and receivers, input validation for Hermitian positive-semidefinite correlation matrices, a CLI and an adapter for explicit room paths. Added an independent-stereo example and numerical checks.
+- Corrected documented IACC, source directivity, atmospheric attenuation, specular-scattering and cross-spectral conventions. The propagation adapter excludes the diffuse statistical tail and is not calibrated absolute SPL.
 
-## Local build bfc8387 — 2026-11-03
+## Phase 4 — Room authoring and instrument reference work
 
-- Added optional atmospheric attenuation and ideal source/receiver directionality on explicit paths, ideal resonator modes, a frequency trace, room editor, and expanded Frankenjack controls with equation and offline checks.
+### Local build b7e0b66 — 2026-11-03
+
+- Expanded Room Studio controls for dimensions, surface materials, environmental parameters, sources, listeners, decay and room settings. Added click/drag and keyboard editing, room JSON export, and reconstructable instruction export with corresponding CLI support.
+- Added editor and round-trip checks. The supported geometry is rectangular; the viewer and exported room are not a general arbitrary-mesh acoustic solver.
+
+### Local build 092e434 — 2026-11-03
+
+- Added an experimental supervised reference matcher: labeled short recordings produce log-spectrum feature vectors and an identification command ranks examples by distance. Model files retain input paths and hashes.
+- Added unit and CLI checks and documented format and model limitations. It is not a pretrained neural network, source separator, calibrated probability model or validated full-song classifier.
+
+### Local build bfc8387 — 2026-11-03
+
+- Added room-physics foundations: optional atmospheric loss and idealized source/receiver directivity on explicit paths; ideal string, pipe, stiff-string and circular-membrane mode equations; and time-stamped spectral peak tracing.
+- Added a lightweight room-editor foundation, live-view navigation work, and expanded Frankenjack Advanced Mix controls. Added equation, reference-value, frequency-trace, UI and offline mix checks.
+- Documented the formulas and limitations. Spectral peaks are measurements rather than note events, ideal modes do not fully model real instruments, and the room model does not establish a uniquely recovered space.
 
 ## Baseline 9cabc1e — 2026-11-02
 
-- Consolidated the experimental room engine, configurable lab, math and documentation baseline. See Git history for earlier work.
+- Consolidated the experimental room engine, configurable audio lab, VM packaging, CLI, viewer and initial math documentation. The VM device and routing were experimental; the user's earlier listening report was not a controlled equivalence test. Earlier repository history predates this changelog.
