@@ -47,7 +47,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Live monitor compilation failed.' }
 if ($LipscanModels) { Copy-Tree $LipscanModels (Join-Path $staging 'lipscan-packs') }
 $launcher = '@echo off' + "`r`n" + 'setlocal' + "`r`n" + 'set "PATH=%~dp0python;%~dp0node;%PATH%"' + "`r`n" + 'cd /d "%~dp0app"' + "`r`n"
 [IO.File]::WriteAllText((Join-Path $staging 'Open-Earnest.cmd'), $launcher + '"%~dp0python\python.exe" -m earnest.desktop_v2' + "`r`n" + 'if errorlevel 1 pause' + "`r`n")
-[IO.File]::WriteAllText((Join-Path $staging 'Earnest-CLI.cmd'), $launcher + 'cmd /k' + "`r`n")
+[IO.File]::WriteAllText((Join-Path $staging 'Earnest-CLI.cmd'), $launcher + '"%~dp0python\python.exe" -m earnest' + "`r`n" + 'if errorlevel 1 pause' + "`r`n")
 [IO.File]::WriteAllText((Join-Path $staging 'Live-View.cmd'), $launcher + '"%~dp0python\python.exe" -m earnest live-view --endpoint "Earnest Virtual Audio Device" --open' + "`r`n" + 'pause' + "`r`n")
 [IO.File]::WriteAllText((Join-Path $staging 'python\earnest.cmd'), '@echo off' + "`r`n" + '"%~dp0python.exe" -m earnest %*' + "`r`n")
 Add-Type -AssemblyName System.IO.Compression.FileSystem

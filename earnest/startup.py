@@ -6,12 +6,15 @@ import os
 import platform
 import sys
 from time import perf_counter
+from .version import SHELL_VERSION
 
 
 _RESET = "\x1b[0m"
-_GREEN = "\x1b[92m"
-_DIM_GREEN = "\x1b[32m"
-_CYAN = "\x1b[96m"
+_PINK = "\x1b[92m"
+_BLUE = "\x1b[96m"
+_WHITE = "\x1b[92m"
+_MUTED = "\x1b[32m"
+_FRAME = "\x1b[32m"
 _AMBER = "\x1b[93m"
 _RED = "\x1b[91m"
 _BOLD = "\x1b[1m"
@@ -48,38 +51,43 @@ def _paint(text: str, color: str, bold: bool = False) -> str:
 
 
 def _feather_art() -> tuple[str, ...]:
-    # A quill-shaped mark that remains legible in the default CMD code page.
     return (
-        "                    .-.",
-        "                 .-'   `.",
-        "                /  /\\    \\",
-        "               /  /  \\    \\",
-        "              /__/    \\____\\",
-        "              \\  \\    /   /",
-        "               `--\\--'   /",
-        "                   \\    /",
-        "                    `--'",
+        r"       .-''''-.",
+        r"     .'   /  .'",
+        r"    /   /  .'/",
+        r"   /  /  .' /",
+        r"  / /  .'  /",
+        r" /.' .'  .'",
+        r" ' ./_.-'",
+        r"   /",
+        r"  /",
     )
 
 
 def _banner() -> None:
-    print(_paint("+----------------------------------------------------------------+", _DIM_GREEN))
-    for index, line in enumerate(_feather_art()):
-        if index == 2:
-            line += "      E A R N E S T  //  ROOM ACOUSTICS"
-        elif index == 3:
-            line += "      PERCEPTION  /  SOLVER  /  AUDIO ENGINE"
-        elif index == 4:
-            line += "      BUILD 0.1  |  WIN32  |  BOOT SEQUENCE"
-        print(_paint("| " + line.ljust(66) + " |", _GREEN, bold=(index == 2)))
-    print(_paint("+----------------------------------------------------------------+", _DIM_GREEN))
+    logo = (
+        r" _____    _    ____  _   _ _____ ____ _____",
+        r"| ____|  / \  |  _ \| \ | | ____/ ___|_   _|",
+        r"|  _|   / _ \ | |_) |  \| |  _| \___ \ | |",
+        r"| |___ / ___ \|  _ <| |\  | |___ ___) || |",
+        r"|_____/_/   \_\_| \_\_| \_|_____|____/ |_|",
+        r"",
+        r"  P E R C E P T I O N  /  R O O M  /  A U D I O",
+        "  COMMAND DECK  ::  v" + SHELL_VERSION,
+        r"",
+    )
+    print(_paint("+" + "-" * 73 + "+", _FRAME))
+    for feather, word in zip(_feather_art(), logo):
+        print(_paint("| ", _FRAME) + _paint(feather.ljust(18), _PINK) +
+              _paint(word.ljust(53), _WHITE if "COMMAND DECK" not in word else _BLUE) + _paint(" |", _FRAME))
+    print(_paint("+" + "-" * 73 + "+", _FRAME))
 
 
 def _load_stage(number: int, label: str, modules: tuple[str, ...]) -> None:
-    print(_paint("\n[0x%02X] INIT // %s" % (number, label.upper()), _CYAN, bold=True))
+    print(_paint("\n[0x%02X] INIT // %s" % (number, label.upper()), _BLUE, bold=True))
     width = max(len(module) for module in modules)
     for module in modules:
-        sys.stdout.write(_paint("    > %-*s " % (width, module), _DIM_GREEN))
+        sys.stdout.write(_paint("    > %-*s " % (width, module), _MUTED))
         sys.stdout.flush()
         try:
             importlib.import_module(module)
@@ -87,10 +95,10 @@ def _load_stage(number: int, label: str, modules: tuple[str, ...]) -> None:
             print(_paint("[FAILED]", _RED, bold=True))
             print(_paint("      %s" % exc, _RED))
             raise SystemExit(1)
-        print(_paint("[ LOADED ]", _GREEN, bold=True))
+        print(_paint("[ LOADED ]", _PINK, bold=True))
 
 
-def boot() -> None:
+def boot(interactive: bool = False) -> None:
     """Load command, analysis, room engine, and audio layers before dispatch."""
     global _COLOR
     _COLOR = _enable_terminal_colors()
@@ -115,7 +123,7 @@ def boot() -> None:
     for number, (label, modules) in enumerate(stages, 1):
         _load_stage(number, label, modules)
 
-    print(_paint("\n[0x07] INIT // COMPONENT REGISTRY", _CYAN, bold=True))
+    print(_paint("\n[0x07] INIT // COMPONENT REGISTRY", _BLUE, bold=True))
     try:
         from .engine import create_engine
         engine = create_engine()
@@ -123,18 +131,18 @@ def boot() -> None:
         print(_paint("    [FAILED] %s" % exc, _RED, bold=True))
         raise SystemExit(1)
     for component in engine.components:
-        print(_paint("    + %s" % component, _GREEN))
+        print(_paint("    + %s" % component, _MUTED))
 
     try:
         importlib.import_module("earnest.audio.host")
         audio_status = "LIVE ROUTER MODULE LOADED // DEVICE AND ROUTE NOT VERIFIED"
-        audio_color = _GREEN
+        audio_color = _BLUE
     except ImportError:
         audio_status = "DEVICE OUTPUT UNAVAILABLE // WAV RENDER ACTIVE"
         audio_color = _AMBER
     print(_paint("\n[AUDIO] " + audio_status, audio_color))
     elapsed_ms = (perf_counter() - started) * 1000.0
-    print(_paint("\n+----------------------------------------------------------------+", _GREEN))
-    print(_paint("|  ENGINE ONLINE  //  READY  //  BOOT %.0f ms" % elapsed_ms, _GREEN, bold=True))
-    print(_paint("+----------------------------------------------------------------+", _GREEN))
-    print(_paint("Command accepted. Returning to shell interface.\n", _DIM_GREEN))
+    print(_paint("\n+----------------------------------------------------------------+", _FRAME))
+    print(_paint("|  ENGINE ONLINE  //  READY  //  BOOT %.0f ms" % elapsed_ms, _PINK, bold=True))
+    print(_paint("+----------------------------------------------------------------+", _FRAME))
+    print(_paint("Command deck ready.\n" if interactive else "Command accepted. Returning to shell interface.\n", _MUTED))

@@ -29,6 +29,20 @@ Copy-Item -Path (Join-Path $build '*') -Destination (Join-Path $app 'stagejack')
 Copy-Item -LiteralPath (Join-Path $build 'EarnestAudioHost-eq.exe') -Destination (Join-Path $app 'earnest\audio\native\EarnestAudioHost-eq.exe')
 Copy-Item -LiteralPath (Join-Path $repo 'requirements-basic-pitch.txt') -Destination $app
 Copy-Item -LiteralPath (Join-Path $repo 'requirements-demucs.txt') -Destination $app
+$revision = $env:EARNEST_BUILD_REVISION
+$dirty = $false
+if ($revision -and $revision -notmatch '^[0-9a-fA-F]{40}$') { throw 'Invalid build revision.' }
+if (-not $revision) {
+  try {
+    $revision = (& git -C $repo rev-parse HEAD 2>$null | Select-Object -First 1)
+    if ($LASTEXITCODE -ne 0 -or $revision -notmatch '^[0-9a-fA-F]{40}$') { $revision = $null }
+    if ($revision) { $dirty = [bool]((& git -C $repo status --porcelain 2>$null | Measure-Object -Line).Lines) }
+  } catch { $revision = $null }
+}
+$versionText = [IO.File]::ReadAllText((Join-Path $repo 'earnest\version.py'))
+$matchVersion = [regex]::Match($versionText, '(?m)^SHELL_VERSION\s*=\s*"([0-9A-Za-z.+-]+)"\s*$')
+if (-not $matchVersion.Success) { throw 'Shell version missing or invalid.' }
+[ordered]@{schema='earnest.build.v1'; revision=$revision; dirty=$dirty; shell_version=$matchVersion.Groups[1].Value} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $app 'earnest-build.json') -Encoding UTF8
 $frankenjackLauncher = @'
 @echo off
 setlocal
@@ -45,7 +59,7 @@ $files = @(Get-ChildItem -LiteralPath $payload -Recurse -File | ForEach-Object {
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Update-Earnest-VM.cmd'),(Join-Path $PSScriptRoot 'Update-Earnest-VM.ps1'),(Join-Path $PSScriptRoot 'Update-Earnest-VM-Full.cmd'),(Join-Path $PSScriptRoot 'Update-Earnest-VM-Full.ps1'),(Join-Path $PSScriptRoot 'VM-UPGRADE-README.txt'),(Join-Path $PSScriptRoot 'VM-UPGRADE.md') -Destination $out
 $documentation = Join-Path $out 'documentation'
 New-Item -ItemType Directory -Path $documentation | Out-Null
-foreach ($name in @('BUILD_NOTES_NOV_03.md','ROOM_SOLVER_MATH.md','PHYSICS_NOTES.md','ROADMAP.md','CLI_COMMAND_TRANSLATION.md','ENGINE_ARCHITECTURE.md','SUITE_UPDATES_PLAN.md','HYPOTHESIS_EVALUATION.md','EFFECT_PURSUIT.md','CUDA_BACKEND.md')) {
+foreach ($name in @('BUILD_NOTES_NOV_03.md','ROOM_SOLVER_MATH.md','PHYSICS_NOTES.md','ROADMAP.md','CLI_COMMAND_TRANSLATION.md','ENGINE_ARCHITECTURE.md','ROOM_PROFILE_ARCHITECTURE.md','SUITE_UPDATES_PLAN.md','HYPOTHESIS_EVALUATION.md','EFFECT_PURSUIT.md','CUDA_BACKEND.md')) {
   Copy-Item -LiteralPath (Join-Path $repo ('docs\' + $name)) -Destination $documentation
 }
 Copy-Item -LiteralPath (Join-Path $repo 'CHANGELOG.md') -Destination $documentation

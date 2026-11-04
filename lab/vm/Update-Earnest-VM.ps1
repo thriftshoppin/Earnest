@@ -36,6 +36,13 @@ try {
     if ((Get-Sha256 $destination) -ne $item.sha256) { throw "Verification failed for $destination; backup: $backup" }
     $copied++
   }
+  # The first lab install provided this launcher; update it while preserving a backup.
+  $cliLauncher = Join-Path $target 'Earnest-CLI.cmd'
+  if (Test-Path -LiteralPath $cliLauncher -PathType Leaf) {
+    Copy-Item -LiteralPath $cliLauncher -Destination (Join-Path $backup 'Earnest-CLI.cmd')
+    $lines = @('@echo off','setlocal','set "PATH=%~dp0python;%~dp0node;%PATH%"','cd /d "%~dp0app"','"%~dp0python\python.exe" -m earnest','if errorlevel 1 pause')
+    [IO.File]::WriteAllText($cliLauncher, (($lines -join "`r`n") + "`r`n"), [Text.Encoding]::ASCII)
+  }
   Write-Host "Updated $copied application files. Backup: $backup" -ForegroundColor Green
   Write-Host 'Rooms, models, settings, the Python runtime, and the installed audio driver were not replaced.'
   Write-Host 'Reopen the CLI, Room Studio, or Frankenjack. Optional transcription/separation backends need separate setup in the VM.'

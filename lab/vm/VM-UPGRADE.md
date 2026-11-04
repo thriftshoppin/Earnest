@@ -1,5 +1,21 @@
 # Upgrading the existing Earnest VM lab
 
+## Shell 0.5.0-prerelease: first in-place update
+
+Extract the initial update ZIP to a writable guest folder, close Earnest and Frankenjack, then run `Update-Earnest-VM-Full.cmd` as administrator. It upgrades the existing lab and sets up the optional model runtimes; use `Update-Earnest-VM.cmd` for the app-only update. The first update has the original green startup. Existing rooms, audio, settings and the installed driver are preserved.
+
+Open `Earnest-CLI.cmd` in the installed lab. It starts the interactive shell without starting the audio route. To receive the next published source revision, type:
+
+```text
+update check
+update stage
+update install
+```
+
+Staging downloads source, builds Frankenjack and the VM update, and requires guest internet, Windows PowerShell, the .NET Framework C# compiler, and free disk space. `update install` closes the shell and opens a visible elevated installer after it exits. Close any other Earnest or Frankenjack windows first. Follow the updater's completion message and reopen `Earnest-CLI.cmd`; the first published change switches the startup to the StageJack pink, blue and off-white palette. It does not automatically update Windows, the driver, or optional model environments. `update check` compares Git revisions; it does not interpret version ordering. The package integrity hashes do not authenticate the publisher.
+
+If the installer reports failure, keep its displayed error and backup folder. Recovery is manual. Audio is started only by `boot` after configuring the jack. A complete guest update and playback have not yet been verified.
+
 The application update is for an existing installation; it does not create the VM or install a driver. Extract the ZIP to a writable folder in the guest, stop the lab's running applications, and run `Update-Earnest-VM.cmd`. The default install is `%USERPROFILE%\tools\Earnest-VM-Lab`; `EARNEST_LAB_INSTALL_DIR` selects a different existing installation. The updater verifies payload hashes, saves copies of existing overwritten files under `backup-update-*`, copies the new files, and verifies them again. It does not delete other files. Backups do not include newly added files, and rollback is manual. If it fails, keep the backup and error message.
 
 The package updates the Earnest Python package and room editor, live viewer files, Frankenjack executable, and its native host. It preserves the VM's inbox, rooms, models, user settings, existing Python and Node runtimes, and driver. It does not change Secure Boot, test signing or certificates. It does not deploy model runtimes or weights. It has not been applied to the user's VM or validated against live audio.

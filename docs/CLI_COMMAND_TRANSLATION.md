@@ -1,6 +1,6 @@
 # Earnest command language: equation controls and output
 
-**Status: mixed implementation and UX proposal.** `detect`, `room-solve-from-analysis`, and the three file-based room percentage commands described below are implemented. The interactive room session, guided room creation/editing, live output selection and refresh behavior remain proposals.
+**Status: mixed implementation and UX proposal.** The current shell and its command table are documented at the end of this page. The older interactive room editing and solving proposals below are distinct from the implemented jack shell.
 
 ### Implemented room percentage commands
 
@@ -215,3 +215,33 @@ These choices should be settled before wiring user-facing translations into the 
 ## Evaluate and rank model hypotheses
 
 See [hypothesis evaluation](HYPOTHESIS_EVALUATION.md) for input format, alignment requirements, equations, output artifacts and complete examples. `hypothesis-evaluate` measures an aligned reference against one or more stems and optional note events; `hypothesis-rank` compares reports using explicitly supplied weights.
+# Earnest shell 0.5.0-prerelease: implemented commands
+
+Run `earnest` to enter the shell. It loads the command environment but does not start audio. `boot` explicitly starts the saved jack. Legacy one-shot commands continue to work both outside and inside the shell.
+
+| Command | Aliases | Effect |
+|---|---|---|
+| `configure jack` | `configure`, `config jack` | Guided input mode, device and room setup. |
+| `devices` | `ls dev`, `ls devices` | List playback and capture endpoints and IDs. |
+| `set in NAME` | `set input NAME` | Select input by unique name or ID. |
+| `set out NAME` | `set output NAME` | Select playback output by unique name or ID. |
+| `set mode loopback` | `set mode capture` | Select playback loopback or recording capture; changing mode clears the input. |
+| `set room "PATH"` | — | Choose an editable room JSON file. |
+| `set dry N`, `set wet N` | Optional `-f` | Direct and room levels. Normal range 0–100; force allows up to 250. Takes effect at next boot. |
+| `set ceiling N` | — | Set the output ceiling, 1–100%, for next boot. |
+| `prep` | `prep room` | Build or reuse a prepared room filter without starting playback. |
+| `show` | `show jack`, `status` | Display saved settings and owned jack status. |
+| `refresh` | — | Re-list devices and display settings; does not solve a room. |
+| `boot` | — | Open the saved route with a prepared room; compiles it first if needed. |
+| `stop` | — | Stop the jack started by this shell. |
+| `clear jack` | — | Stop this shell's jack and clear saved routing settings. |
+| `update check` | `update` | Compare the installed build revision with the main repository. |
+| `update stage` | — | Download the current repository revision and build a VM update. |
+| `update install` | `update apply` | Close the shell and start the staged VM updater. |
+| `help` | `?` | Show commands. |
+| `exit` | `quit`, `q` | Stop this shell's jack and exit. |
+
+Profiles are stored alongside the saved jack settings under the user's local Earnest data directory. The profile key includes room contents, dry/wet levels, solver source and numerical library version. Changing these inputs produces a new profile. It is an Earnest native filter, not yet a VST or general-purpose plugin. Preparing ahead removes repeat room solving at startup; the existing live convolution and its 85 ms default lookahead still affect playback latency. The live bridge and route must be validated on the intended devices. This command set does not yet provide seamless profile switching from the shell.
+
+The existing longer room-control proposals below remain design notes unless explicitly marked implemented. In particular, `refresh` in those proposals differs from the shell command documented above.
+

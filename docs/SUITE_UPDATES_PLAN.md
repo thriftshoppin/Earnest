@@ -1,6 +1,8 @@
 # Earnest suite updates: design plan
 
-This is a proposal, not an implemented updater. It covers the engine and CLI, Studio, Frankenjack, optional models and the VM lab. Driver updates require their own Windows driver installation and signing workflow; updating a user-space application alone does not install or validate a driver.
+The shell has a preliminary VM application updater: `update check` reads the current main-branch revision, `update stage` downloads that exact revision and invokes its VM update builder, and `update install` exits the shell and starts the existing elevated VM updater. The staged package uses the existing integrity manifest and backup behavior. This is not a signed release, automatic rollback, component compatibility system, or driver updater; those remain proposals below. The updater builds the published repository revision, so unpublished local changes are not included. Existing installations without build metadata report their revision as unknown. The complete network-to-VM path has not been verified in the guest.
+
+The broader proposal covers the engine and CLI, Studio, Frankenjack, optional models and the VM lab. Driver updates require their own Windows driver installation and signing workflow; updating a user-space application alone does not install or validate a driver.
 
 ## Update contract
 

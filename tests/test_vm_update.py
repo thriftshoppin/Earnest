@@ -56,7 +56,7 @@ class VMUpdateTests(unittest.TestCase):
         script=Path(__file__).resolve().parents[1]/'lab/vm/Update-Earnest-VM.ps1'
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp); install=root/'install'; package=root/'package'
-            for path, data in ((install/'app/earnest/cli.py',b'old'),(install/'python/python.exe',b'python'),(install/'app/inbox/rooms/user.json',b'room')):
+            for path, data in ((install/'app/earnest/cli.py',b'old'),(install/'python/python.exe',b'python'),(install/'app/inbox/rooms/user.json',b'room'),(install/'Earnest-CLI.cmd',b'old launcher')):
                 path.parent.mkdir(parents=True,exist_ok=True); path.write_bytes(data)
             package.mkdir(); updater=package/'Update-Earnest-VM.ps1'; updater.write_bytes(script.read_bytes())
             payload=package/'payload/app/earnest/cli.py'; payload.parent.mkdir(parents=True); payload.write_bytes(b'new')
@@ -68,6 +68,8 @@ class VMUpdateTests(unittest.TestCase):
             self.assertEqual((install/'app/earnest/cli.py').read_bytes(),b'new')
             self.assertEqual((install/'app/inbox/rooms/user.json').read_bytes(),b'room')
             self.assertEqual(next(install.glob('backup-update-*/app/earnest/cli.py')).read_bytes(),b'old')
+            self.assertEqual(next(install.glob('backup-update-*/Earnest-CLI.cmd')).read_bytes(),b'old launcher')
+            self.assertIn(b'-m earnest', (install/'Earnest-CLI.cmd').read_bytes())
             payload.write_bytes(b'corrupt')
             result=subprocess.run(command,capture_output=True,text=True)
             self.assertNotEqual(result.returncode,0)

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Shell 0.5.0-prerelease
+
+- Added an interactive shell with saved jack settings, short device and routing commands, explicit boot and process ownership. Existing one-shot commands remain available. The startup artwork is a draft awaiting review.
+- Added reusable, content-keyed room filter preparation with `prep`. Boot uses the prepared filter when its inputs match; room edits or changed dry/wet levels require a new filter. This reduces repeated preparation work, not the convolution delay or the existing 85 ms lookahead. Profiles are native Earnest filters, not VST plugins; shell-controlled live profile replacement is not yet implemented.
+- Added preliminary repository revision checking, update staging and a VM updater handoff. This uses the current published main branch and existing VM installer; it is not an authenticated release or automatic rollback system. The guest upgrade still requires end-to-end verification.
+- Added shell, cache, archive safety and VM launcher checks. No live audio route has been exercised as part of this change.
+
 This log records local builds, grouped by development phase. Dates are local project dates. These builds are not necessarily installed or publicly released. The baseline is the last fetched `origin/master` at `9cabc1e`; the exact state of the user's VM has not been independently checked. See `docs/BUILD_NOTES_NOV_03.md` for a narrative and `docs/PHYSICS_NOTES.md` and `docs/ROOM_SOLVER_MATH.md` for equations, references and assumptions.
 
 ## Unreleased — Elevated VM update launchers

@@ -63,6 +63,12 @@ def devices() -> list[dict[str, str]]:
             for endpoint, name in [row.split("\t", 1)]]
 
 
+def capture_devices() -> list[dict[str, str]]:
+    rows = _run(["--capture-devices"]).stdout.splitlines()
+    return [{"id": endpoint, "name": name} for row in rows if "\t" in row
+            for endpoint, name in [row.split("\t", 1)]]
+
+
 def default_endpoint_id() -> str:
     return _run(["--default-id"]).stdout.strip()
 
