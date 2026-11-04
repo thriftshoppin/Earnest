@@ -10,13 +10,13 @@ from .version import SHELL_VERSION
 
 
 _RESET = "\x1b[0m"
-_PINK = "\x1b[92m"
-_BLUE = "\x1b[96m"
-_WHITE = "\x1b[92m"
-_MUTED = "\x1b[32m"
-_FRAME = "\x1b[32m"
-_AMBER = "\x1b[93m"
-_RED = "\x1b[91m"
+_PINK = "\x1b[38;2;255;46;136m"       # StageJack accent
+_BLUE = "\x1b[38;2;0;190;255m"        # StageJack electric blue
+_WHITE = "\x1b[38;2;238;242;240m"     # StageJack text
+_MUTED = "\x1b[38;2;160;170;166m"
+_FRAME = "\x1b[38;2;76;91;86m"
+_AMBER = "\x1b[38;2;255;176;0m"
+_RED = "\x1b[38;2;255;95;95m"
 _BOLD = "\x1b[1m"
 _COLOR = False
 

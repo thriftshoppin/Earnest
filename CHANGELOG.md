@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — First shell appearance update
+
+- Switched the startup display from green to the Frankenjack palette: hot pink feather and ready status, off-white wordmark, electric blue headings, muted frame and text. This is a source revision within shell version 0.5.0-prerelease.
+
 ## Unreleased — Shell 0.5.0-prerelease
 
 - Added an interactive shell with saved jack settings, short device and routing commands, explicit boot and process ownership. Existing one-shot commands remain available. The startup artwork is a draft awaiting review.
